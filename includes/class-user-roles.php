@@ -44,6 +44,8 @@ class RT_User_Roles_V2 {
             'post.php',
             'profile.php',
             'admin-ajax.php',
+            'rt-employee-manager-v2-admin',
+            'rt-employee-manager-v2-kunden-dashboard',
             'rt-employee-dashboard-v2',
             'rt-employee-reports-v2'
         );
@@ -96,50 +98,47 @@ class RT_User_Roles_V2 {
      */
     public function customize_admin_menu() {
         $user = wp_get_current_user();
+        
+        // Only customize menu for kunden_v2 users (not administrators)
         if (!in_array('kunden_v2', $user->roles) || in_array('administrator', $user->roles)) {
             return;
         }
         
         global $menu, $submenu;
         
-        // Remove unwanted menu items for kunden users
+        // Remove unwanted menu items for kunden users only
         $remove_menu_items = array(
-            'index.php',                 // Dashboard
-            'separator1',                // Separator
-            'edit.php',                  // Posts
-            'upload.php',                // Media
-            'edit.php?post_type=page',   // Pages
-            'edit-comments.php',         // Comments
-            'separator2',                // Separator
-            'themes.php',                // Appearance
-            'plugins.php',               // Plugins
-            'users.php',                 // Users
-            'tools.php',                 // Tools
-            'options-general.php',       // Settings
-            'separator-last',            // Separator
+            'index.php',                     // Dashboard
+            'separator1',                    // Separator
+            'edit.php',                      // Posts
+            'upload.php',                    // Media
+            'edit.php?post_type=page',       // Pages
+            'edit-comments.php',             // Comments
+            'separator2',                    // Separator
+            'themes.php',                    // Appearance
+            'plugins.php',                   // Plugins
+            'users.php',                     // Users
+            'tools.php',                     // Tools
+            'options-general.php',           // Settings
+            'separator-last',                // Separator
         );
         
-        // Also remove specific admin bar items
+        // Also remove specific admin bar items for kunden users only
         add_action('wp_before_admin_bar_render', array($this, 'remove_admin_bar_items'));
         
         foreach ($remove_menu_items as $item) {
             remove_menu_page($item);
         }
         
-        // Remove unwanted submenus
-        if (isset($submenu['edit.php?post_type=angestellte_v2'])) {
-            unset($submenu['edit.php?post_type=angestellte_v2'][10]); // Remove "Add New" if needed
-        }
-        
-        // Add custom menu items
-        add_menu_page(
+        // Add dashboard submenu to the main admin menu for kunden users
+        add_submenu_page(
+            'rt-employee-manager-v2-admin',
             __('Dashboard', 'rt-employee-manager-v2'),
             __('Dashboard', 'rt-employee-manager-v2'),
             'read',
-            'rt-employee-dashboard-v2',
+            'rt-employee-manager-v2-kunden-dashboard',
             array($this, 'dashboard_page'),
-            'dashicons-dashboard',
-            2
+            0  // Position at top
         );
         
     }

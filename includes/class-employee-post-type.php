@@ -41,7 +41,7 @@ class RT_Employee_Post_Type_V2 {
             'labels' => $labels,
             'public' => false,
             'show_ui' => true,
-            'show_in_menu' => true,
+            'show_in_menu' => 'rt-employee-manager-v2-admin',
             'menu_icon' => 'dashicons-groups',
             'menu_position' => 25,
             'capability_type' => array('angestellte_v2', 'angestellte_v2s'),
