@@ -59,6 +59,7 @@ class RT_Employee_Meta_Boxes_V2 {
             .rt-meta-v2 .form-section h4 { margin: 0 0 15px 0; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
             .rt-meta-v2 label { display: block; font-weight: 600; margin-bottom: 5px; color: #333; }
             .rt-meta-v2 input, .rt-meta-v2 select, .rt-meta-v2 textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+            .rt-meta-v2 input[type="checkbox"], .rt-meta-v2 input[type="radio"] { width: auto; }
             .rt-meta-v2 input:focus, .rt-meta-v2 select:focus, .rt-meta-v2 textarea:focus { border-color: #0073aa; outline: none; box-shadow: 0 0 0 1px #0073aa; }
             .rt-meta-v2 .checkbox-group label { display: inline; font-weight: normal; margin-left: 5px; }
             .rt-meta-v2 .radio-group { display: flex; gap: 15px; }
@@ -199,7 +200,7 @@ class RT_Employee_Meta_Boxes_V2 {
                     </div>
                     <div>
                         <label><?php _e('Arbeitstage', 'rt-employee-manager-v2'); ?></label>
-                        <div class="checkbox-group" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 5px;">
+                        <fieldset style="margin-top: 5px;">
                             <?php
                             $days = array(
                                 'Mo' => __('Mo', 'rt-employee-manager-v2'),
@@ -211,13 +212,13 @@ class RT_Employee_Meta_Boxes_V2 {
                                 'So' => __('So', 'rt-employee-manager-v2')
                             );
                             foreach ($days as $key => $label): ?>
-                                <label style="display: flex; align-items: center; white-space: nowrap;">
+                                <label style="display: inline-block; margin-right: 15px; margin-bottom: 5px;">
                                     <input type="checkbox" name="arbeitstagen[]" value="<?php echo esc_attr($key); ?>" 
-                                           style="margin-right: 5px;" <?php checked(in_array($key, $data['arbeitstagen'])); ?> />
+                                           <?php checked(in_array($key, $data['arbeitstagen'])); ?> />
                                     <?php echo esc_html($label); ?>
                                 </label>
                             <?php endforeach; ?>
-                        </div>
+                        </fieldset>
                     </div>
                     <div></div>
                 </div>
