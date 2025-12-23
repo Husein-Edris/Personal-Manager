@@ -1,0 +1,17 @@
+{
+    "name": "rt/employee-manager-v2",
+    "description": "Simple employee management for Austrian accounting firms",
+    "type": "wordpress-plugin",
+    "require": {
+        "php": ">=7.4",
+        "dompdf/dompdf": "^2.0"
+    },
+    "config": {
+        "vendor-dir": "vendor"
+    },
+    "autoload": {
+        "psr-4": {
+            "RT\\EmployeeManager\\": "includes/"
+        }
+    }
+}

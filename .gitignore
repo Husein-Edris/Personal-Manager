@@ -1,0 +1,25 @@
+# Dependencies (vendor is optional - gets installed on demand)
+vendor/
+composer.lock
+
+# Include composer.json for optional DomPDF installation
+!composer.json
+
+# WordPress
+wp-config.php
+.htaccess
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+error_log
+CLAUDE.md
