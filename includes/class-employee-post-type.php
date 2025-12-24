@@ -16,7 +16,6 @@ class RT_Employee_Post_Type_V2 {
         add_action('manage_angestellte_v2_posts_custom_column', array($this, 'custom_column_content'), 10, 2);
         add_action('pre_get_posts', array($this, 'filter_posts_for_kunden'));
         add_filter('map_meta_cap', array($this, 'map_employee_meta_caps'), 10, 4);
-        add_action('admin_footer', array($this, 'add_employee_list_scripts'));
     }
     
     /**
@@ -41,7 +40,7 @@ class RT_Employee_Post_Type_V2 {
             'labels' => $labels,
             'public' => false,
             'show_ui' => true,
-            'show_in_menu' => 'rt-employee-manager-v2-admin',
+            'show_in_menu' => true,
             'menu_icon' => 'dashicons-groups',
             'menu_position' => 25,
             'capability_type' => array('angestellte_v2', 'angestellte_v2s'),
@@ -212,32 +211,10 @@ class RT_Employee_Post_Type_V2 {
             case 'pdf_actions':
                 $latest_pdf = get_post_meta($post_id, '_latest_pdf_url', true);
                 
-                echo '<div style="display: flex; gap: 5px; flex-wrap: wrap;">';
-                
-                // Generate PDF button
-                echo '<button type="button" class="button button-small" onclick="generateQuickPDF(' . $post_id . ')" style="font-size: 11px; padding: 2px 6px;">';
-                echo __('Erstellen', 'rt-employee-manager-v2');
-                echo '</button>';
-                
-                if ($latest_pdf) {
-                    // View PDF button
-                    echo '<a href="' . esc_url($latest_pdf) . '" target="_blank" class="button button-small" style="font-size: 11px; padding: 2px 6px;">';
-                    echo __('Anzeigen', 'rt-employee-manager-v2');
-                    echo '</a>';
-                    
-                    // Download PDF button
-                    $download_url = wp_nonce_url(
-                        admin_url('admin-ajax.php?action=download_employee_pdf&employee_id=' . $post_id), 
-                        'download_pdf_v2', 
-                        'nonce'
-                    );
-                    echo '<a href="' . esc_url($download_url) . '" class="button button-small" style="font-size: 11px; padding: 2px 6px;">';
-                    echo __('Download', 'rt-employee-manager-v2');
-                    echo '</a>';
-                }
-                
-                echo '</div>';
-                echo '<div id="pdf-status-' . $post_id . '" style="font-size: 11px; margin-top: 3px;"></div>';
+                // Show simple edit link instead of PDF buttons
+                echo '<a href="' . get_edit_post_link($post_id) . '" class="button button-small">';
+                echo __('Bearbeiten', 'rt-employee-manager-v2');
+                echo '</a>';
                 break;
         }
     }
@@ -309,11 +286,6 @@ class RT_Employee_Post_Type_V2 {
         return $caps;
     }
     
-    /**
-     * Add PDF generation script to employee list page
-     */
-    public function add_employee_list_scripts() {
-        global $pagenow, $post_type;
         
         if ($pagenow === 'edit.php' && $post_type === 'angestellte_v2') {
             ?>
@@ -344,14 +316,6 @@ class RT_Employee_Post_Type_V2 {
                         console.error('PDF generation failed:', data.data);
                     }
                 })
-                .catch(error => {
-                    if (statusDiv) {
-                        statusDiv.innerHTML = '<span style="color: red;">Fehler</span>';
-                    }
-                    console.error('Error:', error);
-                });
-            }
-            </script>
             <?php
         }
     }
