@@ -140,6 +140,33 @@ class RT_Employee_Post_Type_V2 {
     }
     
     /**
+     * Fix missing employer_id for existing employee posts
+     */
+    public function fix_missing_employer_ids() {
+        $posts = get_posts(array(
+            'post_type' => 'angestellte_v2',
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'meta_query' => array(
+                array(
+                    'key' => 'employer_id',
+                    'compare' => 'NOT EXISTS'
+                )
+            )
+        ));
+        
+        if (!empty($posts)) {
+            error_log("RT DEBUG: Found " . count($posts) . " posts without employer_id");
+        }
+        
+        foreach ($posts as $post) {
+            // Set employer_id to the post author
+            update_post_meta($post->ID, 'employer_id', $post->post_author);
+            error_log("RT DEBUG: Fixed employer_id for post {$post->ID}, set to {$post->post_author}");
+        }
+    }
+    
+    /**
      * Custom admin columns
      */
     public function custom_columns($columns) {
@@ -209,11 +236,15 @@ class RT_Employee_Post_Type_V2 {
                 break;
                 
             case 'pdf_actions':
-                $latest_pdf = get_post_meta($post_id, '_latest_pdf_url', true);
+                // Generate direct PDF view URL
+                $pdf_url = wp_nonce_url(
+                    admin_url('admin-ajax.php?action=generate_and_view_employee_pdf&employee_id=' . $post_id),
+                    'generate_view_pdf_v2',
+                    'nonce'
+                );
                 
-                // Show simple edit link instead of PDF buttons
-                echo '<a href="' . get_edit_post_link($post_id) . '" class="button button-small">';
-                echo __('Bearbeiten', 'rt-employee-manager-v2');
+                echo '<a href="' . esc_url($pdf_url) . '" class="button button-small" target="_blank">';
+                echo __('PDF Anzeigen', 'rt-employee-manager-v2');
                 echo '</a>';
                 break;
         }
@@ -268,16 +299,16 @@ class RT_Employee_Post_Type_V2 {
         if (in_array('kunden', $user->roles) || in_array('kunden_v2', $user->roles)) {
             $employer_id = get_post_meta($post->ID, 'employer_id', true);
             
+            // DEBUG: Log capability check details
+            error_log("RT DEBUG: Cap check - User ID: $user_id, Employer ID: $employer_id, Post ID: {$post->ID}, Cap: $cap");
+            
             // Allow if they are the employer (owner) of this employee
             if ($employer_id && $employer_id == $user_id) {
-                switch ($cap) {
-                    case 'edit_angestellte_v2':
-                    case 'delete_angestellte_v2':
-                    case 'read_angestellte_v2':
-                        return array('exist'); // Minimal capability that all users have
-                        break;
-                }
+                error_log("RT DEBUG: ALLOWING access - user owns this employee");
+                // Allow ALL employee-related capabilities for owners
+                return array('exist'); // Minimal capability that all users have
             } else {
+                error_log("RT DEBUG: DENYING access - user does not own this employee (employer_id: $employer_id, user_id: $user_id)");
                 // If they don't own this employee, deny access
                 return array('do_not_allow');
             }
@@ -286,37 +317,4 @@ class RT_Employee_Post_Type_V2 {
         return $caps;
     }
     
-        
-        if ($pagenow === 'edit.php' && $post_type === 'angestellte_v2') {
-            ?>
-            <script type="text/javascript">
-            function generateQuickPDF(employeeId) {
-                const statusDiv = document.getElementById('pdf-status-' + employeeId);
-                if (statusDiv) {
-                    statusDiv.innerHTML = '<span style="color: #0073aa;">Erstelle PDF...</span>';
-                }
-                
-                fetch(ajaxurl, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: 'action=generate_employee_pdf&employee_id=' + employeeId + '&nonce=<?php echo wp_create_nonce('generate_pdf_v2'); ?>'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        if (statusDiv) {
-                            statusDiv.innerHTML = '<span style="color: green;">✓ PDF erstellt</span>';
-                        }
-                        // Reload the page to show the new PDF buttons
-                        setTimeout(() => location.reload(), 1000);
-                    } else {
-                        if (statusDiv) {
-                            statusDiv.innerHTML = '<span style="color: red;">Fehler</span>';
-                        }
-                        console.error('PDF generation failed:', data.data);
-                    }
-                })
-            <?php
-        }
-    }
 }
