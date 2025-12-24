@@ -108,7 +108,122 @@ class RT_PDF_Generator_V2 {
      * Email employee PDF (AJAX endpoint)
      */
     public function ajax_email_employee_pdf() {
-        wp_send_json_error('Email feature not implemented');
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'email_pdf_v2')) {
+            wp_send_json_error('Security error');
+        }
+        
+        $employee_id = intval($_POST['employee_id']);
+        if (!$employee_id) {
+            wp_send_json_error('Invalid employee ID');
+        }
+        
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            $user = wp_get_current_user();
+            if (!in_array('kunden_v2', $user->roles)) {
+                wp_send_json_error('No permission');
+            }
+            
+            $employer_id = get_post_meta($employee_id, 'employer_id', true);
+            if ($employer_id != $user->ID) {
+                wp_send_json_error('No permission for this employee');
+            }
+        }
+        
+        // Get email addresses - use isset instead of null coalescing
+        $customer_email = isset($_POST['customer_email']) ? sanitize_email($_POST['customer_email']) : '';
+        $send_to_customer = !empty($_POST['send_to_customer']);
+        $send_to_bookkeeping = !empty($_POST['send_to_bookkeeping']);
+        
+        if (!$send_to_customer && !$send_to_bookkeeping) {
+            wp_send_json_error('Please select at least one recipient');
+        }
+        
+        if ($send_to_customer && empty($customer_email)) {
+            wp_send_json_error('Customer email is required');
+        }
+        
+        // Generate PDF
+        $pdf_url = $this->generate_simple_pdf($employee_id);
+        if (!$pdf_url) {
+            wp_send_json_error('Failed to generate PDF');
+        }
+        
+        // Send emails
+        $sent_count = 0;
+        $errors = array();
+        
+        $employee = get_post($employee_id);
+        $subject = sprintf(__('Mitarbeiterdaten: %s', 'rt-employee-manager-v2'), $employee->post_title);
+        
+        // Send to customer
+        if ($send_to_customer) {
+            if ($this->send_pdf_email($customer_email, $subject, $pdf_url, $employee_id)) {
+                $sent_count++;
+            } else {
+                $errors[] = __('Fehler beim Senden an Kunde', 'rt-employee-manager-v2');
+            }
+        }
+        
+        // Send to bookkeeping
+        if ($send_to_bookkeeping) {
+            $bookkeeping_email = get_option('rt_employee_v2_buchhaltung_email', '');
+            if (!empty($bookkeeping_email)) {
+                if ($this->send_pdf_email($bookkeeping_email, $subject, $pdf_url, $employee_id)) {
+                    $sent_count++;
+                } else {
+                    $errors[] = __('Fehler beim Senden an Buchhaltung', 'rt-employee-manager-v2');
+                }
+            } else {
+                $errors[] = __('Buchhaltung E-Mail nicht konfiguriert', 'rt-employee-manager-v2');
+            }
+        }
+        
+        if ($sent_count > 0) {
+            wp_send_json_success(array(
+                'sent_count' => $sent_count,
+                'errors' => $errors,
+                'message' => sprintf(__('%d E-Mail(s) erfolgreich versendet', 'rt-employee-manager-v2'), $sent_count)
+            ));
+        } else {
+            wp_send_json_error('Failed to send any emails: ' . implode(', ', $errors));
+        }
+    }
+    
+    /**
+     * Send PDF email with attachment
+     */
+    private function send_pdf_email($to_email, $subject, $pdf_url, $employee_id) {
+        $employee = get_post($employee_id);
+        if (!$employee) {
+            return false;
+        }
+        
+        // Get employee data for email content
+        $employee_data = $this->get_all_employee_data($employee_id);
+        $company_name = isset($employee_data['employer_name']) ? $employee_data['employer_name'] : 'Unbekannt';
+        
+        // Create email message
+        $message = sprintf(
+            __("Sehr geehrte Damen und Herren,\n\nanbei finden Sie die Mitarbeiterdaten für %s.\n\nUnternehmen: %s\nE-Mail: %s\nArt der Beschäftigung: %s\n\nMit freundlichen Grüßen\nIhr Team", 'rt-employee-manager-v2'),
+            $employee->post_title,
+            $company_name,
+            isset($employee_data['email']) ? $employee_data['email'] : '',
+            isset($employee_data['art_des_dienstverhaltnisses']) ? $employee_data['art_des_dienstverhaltnisses'] : ''
+        );
+        
+        // Convert URL to file path for attachment
+        $upload_dir = wp_upload_dir();
+        $pdf_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $pdf_url);
+        
+        $headers = array('Content-Type: text/plain; charset=UTF-8');
+        $attachments = array();
+        
+        if (file_exists($pdf_path)) {
+            $attachments[] = $pdf_path;
+        }
+        
+        return wp_mail($to_email, $subject, $message, $headers, $attachments);
     }
     
     /**

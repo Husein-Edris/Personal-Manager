@@ -346,8 +346,8 @@ class RT_Employee_Meta_Boxes_V2 {
                 </div>
                 
                 <p>
-                    <button type="button" class="button button-primary" style="width: 100%;" disabled>
-                        <?php _e('PDF versenden (Feature in Entwicklung)', 'rt-employee-manager-v2'); ?>
+                    <button type="button" id="send-pdf-email" class="button button-primary" style="width: 100%;">
+                        <?php _e('PDF versenden', 'rt-employee-manager-v2'); ?>
                     </button>
                 </p>
                 
@@ -579,7 +579,74 @@ class RT_Employee_Meta_Boxes_V2 {
                     if (errorDiv) errorDiv.remove();
                 }
                 
-                console.log("RT Employee Manager V2: Meta box with SVNR validation loaded");
+                // PDF Email functionality
+                const sendEmailBtn = document.getElementById("send-pdf-email");
+                if (sendEmailBtn) {
+                    sendEmailBtn.addEventListener("click", function() {
+                        const emailInput = document.getElementById("pdf-email");
+                        const sendToCustomer = document.getElementById("send-to-kunde");
+                        const sendToBookkeeping = document.getElementById("send-to-bookkeeping");
+                        
+                        const customerEmail = emailInput ? emailInput.value.trim() : "";
+                        const shouldSendToCustomer = sendToCustomer ? sendToCustomer.checked : false;
+                        const shouldSendToBookkeeping = sendToBookkeeping ? sendToBookkeeping.checked : false;
+                        
+                        // Validation
+                        if (!shouldSendToCustomer && !shouldSendToBookkeeping) {
+                            alert("Bitte wählen Sie mindestens einen Empfänger aus.");
+                            return;
+                        }
+                        
+                        if (shouldSendToCustomer && !customerEmail) {
+                            alert("Bitte geben Sie eine E-Mail-Adresse ein.");
+                            emailInput.focus();
+                            return;
+                        }
+                        
+                        // Disable button and show loading
+                        sendEmailBtn.disabled = true;
+                        sendEmailBtn.textContent = "Sende E-Mail...";
+                        
+                        // Get current post ID
+                        const postId = document.getElementById("post_ID") ? document.getElementById("post_ID").value : "";
+                        
+                        // Send AJAX request
+                        fetch(ajaxurl, {
+                            method: "POST",
+                            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                            body: new URLSearchParams({
+                                action: "email_employee_pdf",
+                                employee_id: postId,
+                                customer_email: customerEmail,
+                                send_to_customer: shouldSendToCustomer ? "1" : "",
+                                send_to_bookkeeping: shouldSendToBookkeeping ? "1" : "",
+                                nonce: "' . wp_create_nonce('email_pdf_v2') . '"
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert("✓ " + data.data.message);
+                                // Reset form
+                                if (emailInput) emailInput.value = "";
+                                if (sendToCustomer) sendToCustomer.checked = false;
+                                if (sendToBookkeeping) sendToBookkeeping.checked = false;
+                            } else {
+                                alert("Fehler: " + data.data);
+                            }
+                        })
+                        .catch(error => {
+                            alert("Fehler beim Senden: " + error);
+                        })
+                        .finally(() => {
+                            // Re-enable button
+                            sendEmailBtn.disabled = false;
+                            sendEmailBtn.textContent = "PDF versenden";
+                        });
+                    });
+                }
+                
+                console.log("RT Employee Manager V2: Meta box with SVNR validation and email functionality loaded");
             });
         ');
     }
