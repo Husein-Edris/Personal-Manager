@@ -93,7 +93,7 @@ class RT_Employee_Meta_Boxes_V2 {
                     <label for="sozialversicherungsnummer"><?php _e('Sozialversicherungsnummer', 'rt-employee-manager-v2'); ?></label>
                     <input type="text" name="sozialversicherungsnummer" id="sozialversicherungsnummer" 
                            value="<?php echo esc_attr($data['sozialversicherungsnummer']); ?>" maxlength="10" 
-                           placeholder="1234567890" />
+                           placeholder="1234567890" pattern="[0-9]{10}" inputmode="numeric" required />
                 </div>
                 <div>
                     <label for="geburtsdatum"><?php _e('Geburtsdatum', 'rt-employee-manager-v2'); ?></label>
@@ -498,30 +498,10 @@ class RT_Employee_Meta_Boxes_V2 {
      * Validate Austrian SVNR (Sozialversicherungsnummer)
      */
     private function validate_austrian_svnr($svnr) {
-        // Remove any non-digit characters and check length
+        // Simple validation: only check for exactly 10 digits
         $svnr = preg_replace('/[^0-9]/', '', $svnr);
         
-        if (strlen($svnr) !== 10) {
-            return false;
-        }
-        
-        // Convert to array of digits
-        $digits = str_split($svnr);
-        $check_digit = intval($digits[3]);
-        
-        // Austrian SVNR validation algorithm
-        $weights = [3, 7, 9, 0, 5, 8, 4, 2, 1, 6];
-        $sum = 0;
-        
-        for ($i = 0; $i < 10; $i++) {
-            if ($i !== 3) { // Skip the check digit position
-                $sum += intval($digits[$i]) * $weights[$i];
-            }
-        }
-        
-        $calculated_check_digit = $sum % 11;
-        
-        return $calculated_check_digit === $check_digit;
+        return strlen($svnr) === 10;
     }
     
     /**
@@ -542,9 +522,25 @@ class RT_Employee_Meta_Boxes_V2 {
             document.addEventListener("DOMContentLoaded", function() {
                 const svnrField = document.getElementById("sozialversicherungsnummer");
                 if (svnrField) {
-                    // Format as user types: only numbers, max 10 digits
+                    // Only allow numbers, max 10 digits
                     svnrField.addEventListener("input", function(e) {
                         e.target.value = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
+                    });
+                    
+                    // Prevent non-numeric keystrokes
+                    svnrField.addEventListener("keypress", function(e) {
+                        if (!/[0-9]/.test(e.key) && !["Backspace", "Delete", "Tab", "Enter", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+                            e.preventDefault();
+                        }
+                    });
+                    
+                    // Handle paste events
+                    svnrField.addEventListener("paste", function(e) {
+                        e.preventDefault();
+                        const paste = (e.clipboardData || window.clipboardData).getData("text");
+                        const numbersOnly = paste.replace(/[^0-9]/g, "").slice(0, 10);
+                        e.target.value = numbersOnly;
+                        e.target.dispatchEvent(new Event("input"));
                     });
                     
                     // Validate on blur
@@ -552,7 +548,7 @@ class RT_Employee_Meta_Boxes_V2 {
                         const svnr = e.target.value;
                         if (svnr && !validateAustrianSVNR(svnr)) {
                             e.target.style.borderColor = "#dc3232";
-                            showSVNRError("Ungültige österreichische Sozialversicherungsnummer");
+                            showSVNRError("Bitte geben Sie genau 10 Ziffern ein");
                         } else {
                             e.target.style.borderColor = "";
                             hideSVNRError();
@@ -560,25 +556,9 @@ class RT_Employee_Meta_Boxes_V2 {
                     });
                 }
                 
-                // Austrian SVNR validation function
+                // Simple SVNR validation function - only check for 10 digits
                 function validateAustrianSVNR(svnr) {
-                    if (!/^\d{10}$/.test(svnr)) return false;
-                    
-                    const digits = svnr.split("").map(Number);
-                    const checkDigit = digits[3];
-                    
-                    // Calculate check digit using Austrian algorithm
-                    let sum = 0;
-                    const weights = [3, 7, 9, 0, 5, 8, 4, 2, 1, 6];
-                    
-                    for (let i = 0; i < 10; i++) {
-                        if (i !== 3) { // Skip check digit position
-                            sum += digits[i] * weights[i];
-                        }
-                    }
-                    
-                    const calculatedCheckDigit = sum % 11;
-                    return calculatedCheckDigit === checkDigit;
+                    return /^\d{10}$/.test(svnr);
                 }
                 
                 function showSVNRError(message) {

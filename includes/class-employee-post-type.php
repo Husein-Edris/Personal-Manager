@@ -144,6 +144,11 @@ class RT_Employee_Post_Type_V2 {
      * Fix missing employer_id for existing employee posts
      */
     public function fix_missing_employer_ids() {
+        // Only run once to avoid performance issues
+        if (get_transient('rt_employer_fix_done')) {
+            return;
+        }
+        
         $posts = get_posts(array(
             'post_type' => 'angestellte_v2',
             'post_status' => 'publish',
@@ -156,15 +161,13 @@ class RT_Employee_Post_Type_V2 {
             )
         ));
         
-        if (!empty($posts)) {
-            error_log("RT DEBUG: Found " . count($posts) . " posts without employer_id");
-        }
-        
         foreach ($posts as $post) {
             // Set employer_id to the post author
             update_post_meta($post->ID, 'employer_id', $post->post_author);
-            error_log("RT DEBUG: Fixed employer_id for post {$post->ID}, set to {$post->post_author}");
         }
+        
+        // Set transient to prevent running again for 24 hours
+        set_transient('rt_employer_fix_done', true, DAY_IN_SECONDS);
     }
     
     /**
@@ -300,16 +303,11 @@ class RT_Employee_Post_Type_V2 {
         if (in_array('kunden', $user->roles) || in_array('kunden_v2', $user->roles)) {
             $employer_id = get_post_meta($post->ID, 'employer_id', true);
             
-            // DEBUG: Log capability check details
-            error_log("RT DEBUG: Cap check - User ID: $user_id, Employer ID: $employer_id, Post ID: {$post->ID}, Cap: $cap");
-            
             // Allow if they are the employer (owner) of this employee
             if ($employer_id && $employer_id == $user_id) {
-                error_log("RT DEBUG: ALLOWING access - user owns this employee");
                 // Allow ALL employee-related capabilities for owners
                 return array('exist'); // Minimal capability that all users have
             } else {
-                error_log("RT DEBUG: DENYING access - user does not own this employee (employer_id: $employer_id, user_id: $user_id)");
                 // If they don't own this employee, deny access
                 return array('do_not_allow');
             }
@@ -317,5 +315,4 @@ class RT_Employee_Post_Type_V2 {
         
         return $caps;
     }
-    
 }
