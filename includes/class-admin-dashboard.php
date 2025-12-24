@@ -135,8 +135,8 @@ class RT_Admin_Dashboard_V2 {
                                 <td><input type="text" name="company_name" id="company_name" class="regular-text" required /></td>
                             </tr>
                             <tr>
-                                <th><label for="contact_name"><?php _e('Ansprechpartner', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td><input type="text" name="contact_name" id="contact_name" class="regular-text" required /></td>
+                                <th><label for="contact_name"><?php _e('Ansprechpartner', 'rt-employee-manager-v2'); ?></label></th>
+                                <td><input type="text" name="contact_name" id="contact_name" class="regular-text" /></td>
                             </tr>
                             <tr>
                                 <th><label for="email"><?php _e('E-Mail', 'rt-employee-manager-v2'); ?> *</label></th>
@@ -149,6 +149,25 @@ class RT_Admin_Dashboard_V2 {
                             <tr>
                                 <th><label for="uid_number"><?php _e('UID-Nummer', 'rt-employee-manager-v2'); ?></label></th>
                                 <td><input type="text" name="uid_number" id="uid_number" class="regular-text" /></td>
+                            </tr>
+                            <tr>
+                                <th><label for="address"><?php _e('Adresse', 'rt-employee-manager-v2'); ?> *</label></th>
+                                <td><input type="text" name="address" id="address" class="regular-text" required /></td>
+                            </tr>
+                            <tr>
+                                <th><label for="postal_code"><?php _e('PLZ', 'rt-employee-manager-v2'); ?> *</label></th>
+                                <td><input type="text" name="postal_code" id="postal_code" class="regular-text" maxlength="10" required /></td>
+                            </tr>
+                            <tr>
+                                <th><label for="city"><?php _e('Ort', 'rt-employee-manager-v2'); ?></label></th>
+                                <td><input type="text" name="city" id="city" class="regular-text" /></td>
+                            </tr>
+                            <tr>
+                                <th><label for="password"><?php _e('Passwort', 'rt-employee-manager-v2'); ?> *</label></th>
+                                <td>
+                                    <input type="password" name="password" id="password" class="regular-text" required minlength="8" />
+                                    <p class="description"><?php _e('Mindestens 8 Zeichen', 'rt-employee-manager-v2'); ?></p>
+                                </td>
                             </tr>
                         </table>
                         
@@ -185,7 +204,7 @@ class RT_Admin_Dashboard_V2 {
         }
         
         // Validate required fields
-        $required_fields = array('company_name', 'contact_name', 'email');
+        $required_fields = array('company_name', 'email', 'address', 'postal_code', 'password');
         foreach ($required_fields as $field) {
             if (empty($_POST[$field])) {
                 wp_die(sprintf(__('Feld "%s" ist erforderlich.', 'rt-employee-manager-v2'), $field));
@@ -193,19 +212,27 @@ class RT_Admin_Dashboard_V2 {
         }
         
         $company_name = sanitize_text_field($_POST['company_name']);
-        $contact_name = sanitize_text_field($_POST['contact_name']);
+        $contact_name = sanitize_text_field($_POST['contact_name'] ?? '');
         $email = sanitize_email($_POST['email']);
-        $phone = sanitize_text_field($_POST['phone']);
-        $uid_number = sanitize_text_field($_POST['uid_number']);
+        $phone = sanitize_text_field($_POST['phone'] ?? '');
+        $uid_number = sanitize_text_field($_POST['uid_number'] ?? '');
+        $address = sanitize_text_field($_POST['address']);
+        $postal_code = sanitize_text_field($_POST['postal_code']);
+        $city = sanitize_text_field($_POST['city'] ?? '');
+        $password = $_POST['password']; // Don't sanitize password to preserve special chars
         
         // Check if email already exists
         if (email_exists($email)) {
             wp_die(__('Diese E-Mail-Adresse ist bereits registriert.', 'rt-employee-manager-v2'));
         }
         
+        // Validate password strength
+        if (strlen($password) < 8) {
+            wp_die(__('Das Passwort muss mindestens 8 Zeichen lang sein.', 'rt-employee-manager-v2'));
+        }
+        
         // Create user account
         $username = sanitize_user($email);
-        $password = wp_generate_password(12);
         
         $user_id = wp_create_user($username, $password, $email);
         
@@ -222,6 +249,9 @@ class RT_Admin_Dashboard_V2 {
         update_user_meta($user_id, 'contact_name', $contact_name);
         update_user_meta($user_id, 'phone', $phone);
         update_user_meta($user_id, 'uid_number', $uid_number);
+        update_user_meta($user_id, 'company_address', $address);
+        update_user_meta($user_id, 'company_postal_code', $postal_code);
+        update_user_meta($user_id, 'company_city', $city);
         update_user_meta($user_id, 'created_by_admin', true);
         update_user_meta($user_id, 'created_at', current_time('mysql'));
         
@@ -235,11 +265,10 @@ class RT_Admin_Dashboard_V2 {
         // Send welcome email with login credentials
         $subject = sprintf(__('Ihr Konto bei %s wurde erstellt', 'rt-employee-manager-v2'), get_bloginfo('name'));
         $message = sprintf(
-            __("Hallo %s,\n\nIhr Konto für %s wurde erstellt.\n\nIhre Zugangsdaten:\nBenutzername: %s\nPasswort: %s\n\nSie können sich hier anmelden:\n%s\n\nViele Grüße", 'rt-employee-manager-v2'),
+            __("Hallo %s,\n\nIhr Konto für %s wurde erfolgreich erstellt.\n\nIhre Zugangsdaten:\nBenutzername: %s\nPasswort: [Wie von Ihnen festgelegt]\n\nSie können sich hier anmelden:\n%s\n\nViele Grüße", 'rt-employee-manager-v2'),
             $contact_name,
             $company_name,
             $email,
-            $password,
             wp_login_url()
         );
         
