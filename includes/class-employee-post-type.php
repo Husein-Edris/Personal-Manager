@@ -12,6 +12,7 @@ class RT_Employee_Post_Type_V2 {
     public function __construct() {
         add_action('init', array($this, 'register_post_type'));
         add_action('init', array($this, 'add_capabilities'));
+        add_action('init', array($this, 'fix_missing_employer_ids'));
         add_filter('manage_angestellte_v2_posts_columns', array($this, 'custom_columns'));
         add_action('manage_angestellte_v2_posts_custom_column', array($this, 'custom_column_content'), 10, 2);
         add_action('pre_get_posts', array($this, 'filter_posts_for_kunden'));
