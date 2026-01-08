@@ -380,12 +380,17 @@ class RT_Kuendigung_Handler_V2 {
         }
         
         wp_enqueue_script('jquery');
+        
+        $ajax_url = admin_url('admin-ajax.php');
+        $nonce = wp_create_nonce('email_kuendigung_v2');
+        
         wp_localize_script('jquery', 'rtKuendigungV2', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('email_kuendigung_v2')
+            'ajaxurl' => $ajax_url,
+            'nonce' => $nonce
         ));
         
         wp_add_inline_script('jquery', '
+            console.log("RT Employee Manager V2: Kündigung inline script loaded");
             (function($) {
                 // Email validation helper
                 function isValidEmail(email) {
@@ -394,6 +399,8 @@ class RT_Kuendigung_Handler_V2 {
                 }
                 
                 $(document).ready(function() {
+                    console.log("RT Employee Manager V2: Kündigung script loaded, initializing...");
+                    
                     // Function to update button state based on status
                     function updateKuendigungButtonState() {
                         var statusField = $("#status");
@@ -425,17 +432,21 @@ class RT_Kuendigung_Handler_V2 {
                     });
                     
                     // Open modal
+                    console.log("RT Employee Manager V2: Setting up Kündigung button click handler");
                     $("#create-kuendigung-btn").on("click", function(e) {
+                        console.log("RT Employee Manager V2: Create Kündigung button clicked!");
                         e.preventDefault();
                         e.stopPropagation();
                         
                         // Check status before opening modal
                         var currentStatus = $("#status").val();
+                        console.log("RT Employee Manager V2: Current status:", currentStatus);
                         if (currentStatus === "terminated") {
                             alert("Der Mitarbeiter ist bereits ausgeschieden. Bitte ändern Sie den Beschäftigungsstatus zuerst.");
                             return;
                         }
                         
+                        console.log("RT Employee Manager V2: Showing Kündigung modal");
                         $("#kuendigung-modal").show();
                     });
                     
@@ -447,7 +458,9 @@ class RT_Kuendigung_Handler_V2 {
                     });
                     
                     // Submit form
+                    console.log("RT Employee Manager V2: Setting up Kündigung form submit handler");
                     $("#kuendigung-form").on("submit", function(e) {
+                        console.log("RT Employee Manager V2: Kündigung form submitted!");
                         e.preventDefault();
                         e.stopPropagation();
                         
@@ -612,8 +625,11 @@ class RT_Kuendigung_Handler_V2 {
                             }
                         });
                     });
+                    
+                    console.log("RT Employee Manager V2: Kündigung script initialization complete");
                 });
             })(jQuery);
+            console.log("RT Employee Manager V2: Kündigung inline script finished");
         ');
     }
     
