@@ -458,7 +458,7 @@ class RT_Employee_Meta_Boxes_V2 {
                     ?>
             <p><label style="display: block;">
                     <input type="checkbox" id="send-to-bookkeeping" />
-                    <?php _e('An Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                    <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
                     <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
                 </label></p>
             <?php else: ?>

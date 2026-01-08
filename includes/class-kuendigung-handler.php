@@ -39,6 +39,10 @@ class RT_Kuendigung_Handler_V2 {
             return;
         }
         
+        // Check if employee is already terminated (Ausgeschieden)
+        $employee_status = get_post_meta($post->ID, 'status', true);
+        $is_terminated = ($employee_status === 'terminated');
+        
         // Check if employee already has a Kündigung
         $existing_kuendigungen = get_posts(array(
             'post_type' => 'kuendigung_v2',
@@ -58,263 +62,308 @@ class RT_Kuendigung_Handler_V2 {
         $ajax_url = admin_url('admin-ajax.php');
         $nonce = wp_create_nonce('email_kuendigung_v2');
         ?>
-        <div class="rt-kuendigung-actions" style="padding: 10px;">
-            <style>
-            .rt-kuendigung-actions .button {
-                width: 100%;
-                margin-bottom: 10px;
-                text-align: center;
-            }
-            .kuendigung-item {
-                margin-bottom: 20px;
-                padding: 15px;
-                background: #f9f9f9;
-                border-radius: 4px;
-                border: 1px solid #ddd;
-            }
-            .kuendigung-item h4 {
-                margin-top: 0;
-                margin-bottom: 10px;
-            }
-            .kuendigung-status {
-                font-size: 12px;
-                color: #666;
-                margin-bottom: 10px;
-            }
-            .kuendigung-status .sent {
-                color: green;
-            }
-            .email-form {
-                margin-top: 15px;
-                padding-top: 15px;
-                border-top: 1px solid #ddd;
-            }
-            .email-form input[type="email"] {
-                width: 100%;
-                margin-bottom: 8px;
-            }
-            .email-options label {
-                display: block;
-                margin-bottom: 5px;
-            }
-            </style>
-            
-            <button type="button" id="create-kuendigung-btn" class="button button-primary" style="width: 100%;">
-                <?php _e('Mitarbeiter kündigen', 'rt-employee-manager-v2'); ?>
-            </button>
-            
-            <?php if (!empty($existing_kuendigungen)): ?>
-                <div style="margin-top: 15px;">
-                    <strong><?php _e('Kündigungen:', 'rt-employee-manager-v2'); ?></strong>
-                    <?php foreach ($existing_kuendigungen as $kuendigung): 
+<div class="rt-kuendigung-actions" style="padding: 10px;">
+    <style>
+    .rt-kuendigung-actions .button {
+        width: 100%;
+        margin-bottom: 10px;
+        text-align: center;
+    }
+
+    .rt-kuendigung-actions .button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .kuendigung-item {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f9f9f9;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+    }
+
+    .kuendigung-item h4 {
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+
+    .kuendigung-status {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 10px;
+    }
+
+    .kuendigung-status .sent {
+        color: green;
+    }
+
+    .email-form {
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #ddd;
+    }
+
+    .email-form input[type="email"] {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .email-options label {
+        display: block;
+        margin-bottom: 5px;
+    }
+    </style>
+
+    <button type="button" id="create-kuendigung-btn" class="button button-primary" style="width: 100%;"
+        <?php echo $is_terminated ? 'disabled' : ''; ?>>
+        <?php _e('Mitarbeiter kündigen', 'rt-employee-manager-v2'); ?>
+    </button>
+
+    <?php if (!empty($existing_kuendigungen)): ?>
+    <div style="margin-top: 15px;">
+        <strong><?php _e('Kündigungen:', 'rt-employee-manager-v2'); ?></strong>
+        <?php foreach ($existing_kuendigungen as $kuendigung): 
                         $kuendigungsdatum = get_post_meta($kuendigung->ID, 'kuendigungsdatum', true);
                         $beendigungsdatum = get_post_meta($kuendigung->ID, 'beendigungsdatum', true);
                         $email_sent = get_post_meta($kuendigung->ID, 'email_sent', true);
                         $email_sent_date = get_post_meta($kuendigung->ID, 'email_sent_date', true);
                         $email_recipients = get_post_meta($kuendigung->ID, 'email_recipients', true);
                     ?>
-                        <div class="kuendigung-item" data-kuendigung-id="<?php echo esc_attr($kuendigung->ID); ?>">
-                            <h4>
-                                <a href="<?php echo admin_url('post.php?post=' . $kuendigung->ID . '&action=edit'); ?>">
-                                    <?php echo esc_html($kuendigung->post_title); ?>
-                                </a>
-                            </h4>
-                            
-                            <div class="kuendigung-status">
-                                <?php if ($kuendigungsdatum): ?>
-                                    <strong><?php _e('Kündigungsdatum:', 'rt-employee-manager-v2'); ?></strong> <?php echo date_i18n('d.m.Y', strtotime($kuendigungsdatum)); ?><br>
-                                <?php endif; ?>
-                                <?php if ($beendigungsdatum): ?>
-                                    <strong><?php _e('Beendigungsdatum:', 'rt-employee-manager-v2'); ?></strong> <?php echo date_i18n('d.m.Y', strtotime($beendigungsdatum)); ?><br>
-                                <?php endif; ?>
-                                <?php if ($email_sent === '1'): ?>
-                                    <span class="sent">✓ <?php _e('PDF versendet', 'rt-employee-manager-v2'); ?></span>
-                                    <?php if ($email_sent_date): ?>
-                                        <br><small><?php printf(__('Am: %s', 'rt-employee-manager-v2'), date_i18n(get_option('date_format') . ' H:i', strtotime($email_sent_date))); ?></small>
-                                    <?php endif; ?>
-                                    <?php if ($email_recipients): ?>
-                                        <br><small><?php printf(__('An: %s', 'rt-employee-manager-v2'), esc_html($email_recipients)); ?></small>
-                                    <?php endif; ?>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <!-- Email Form -->
-                            <div class="email-form">
-                                <h4 style="margin-top: 0; font-size: 13px;"><?php _e('PDF per E-Mail versenden', 'rt-employee-manager-v2'); ?></h4>
-                                
-                                <p style="margin-bottom: 15px;">
-                                    <input type="email" class="kuendigung-email-input" 
-                                        placeholder="<?php _e('E-Mail-Adresse eingeben', 'rt-employee-manager-v2'); ?>" 
-                                        value="<?php echo esc_attr($employee_email); ?>"
-                                        style="width: 100%;" />
-                                </p>
-                                
-                                <div class="email-options" style="margin-bottom: 15px;">
-                                    <p><label style="display: block; margin-bottom: 5px;">
-                                        <input type="checkbox" class="send-to-employee" checked />
-                                        <?php _e('An Mitarbeiter senden', 'rt-employee-manager-v2'); ?>
-                                        <?php if ($employee_email): ?>
-                                            <strong>(<?php echo esc_html($employee_email); ?>)</strong>
-                                        <?php endif; ?>
-                                    </label></p>
-                                    
-                                    <?php 
+        <div class="kuendigung-item" data-kuendigung-id="<?php echo esc_attr($kuendigung->ID); ?>">
+            <h4>
+                <a href="<?php echo admin_url('post.php?post=' . $kuendigung->ID . '&action=edit'); ?>">
+                    <?php echo esc_html($kuendigung->post_title); ?>
+                </a>
+            </h4>
+
+            <div class="kuendigung-status">
+                <?php if ($kuendigungsdatum): ?>
+                <strong><?php _e('Kündigungsdatum:', 'rt-employee-manager-v2'); ?></strong>
+                <?php echo date_i18n('d.m.Y', strtotime($kuendigungsdatum)); ?><br>
+                <?php endif; ?>
+                <?php if ($beendigungsdatum): ?>
+                <strong><?php _e('Beendigungsdatum:', 'rt-employee-manager-v2'); ?></strong>
+                <?php echo date_i18n('d.m.Y', strtotime($beendigungsdatum)); ?><br>
+                <?php endif; ?>
+                <?php if ($email_sent === '1'): ?>
+                <span class="sent">✓ <?php _e('PDF versendet', 'rt-employee-manager-v2'); ?></span>
+                <?php if ($email_sent_date): ?>
+                <br><small><?php printf(__('Am: %s', 'rt-employee-manager-v2'), date_i18n(get_option('date_format') . ' H:i', strtotime($email_sent_date))); ?></small>
+                <?php endif; ?>
+                <?php if ($email_recipients): ?>
+                <br><small><?php printf(__('An: %s', 'rt-employee-manager-v2'), esc_html($email_recipients)); ?></small>
+                <?php endif; ?>
+                <?php endif; ?>
+            </div>
+
+            <!-- Email Form -->
+            <div class="email-form">
+                <h4 style="margin-top: 0; font-size: 13px;">
+                    <?php _e('PDF per E-Mail versenden', 'rt-employee-manager-v2'); ?></h4>
+
+                <p style="margin-bottom: 15px;">
+                    <input type="email" class="kuendigung-email-input"
+                        placeholder="<?php _e('E-Mail-Adresse eingeben', 'rt-employee-manager-v2'); ?>"
+                        value="<?php echo esc_attr($employee_email); ?>" style="width: 100%;" />
+                </p>
+
+                <div class="email-options" style="margin-bottom: 15px;">
+                    <p><label style="display: block; margin-bottom: 5px;">
+                            <input type="checkbox" class="send-to-employee" checked />
+                            <?php _e('An Mitarbeiter senden', 'rt-employee-manager-v2'); ?>
+                            <?php if ($employee_email): ?>
+                            <strong>(<?php echo esc_html($employee_email); ?>)</strong>
+                            <?php endif; ?>
+                        </label></p>
+
+                    <?php 
                                     $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', '');
                                     if (!empty($buchhaltung_email)): 
                                     ?>
-                                    <p><label style="display: block;">
-                                        <input type="checkbox" class="send-to-bookkeeping" />
-                                        <?php _e('An Buchhaltung senden', 'rt-employee-manager-v2'); ?>
-                                        <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
-                                    </label></p>
-                                    <?php endif; ?>
-                                </div>
-                                
-                                <p>
-                                    <button type="button" class="button button-primary send-kuendigung-email" 
-                                        data-kuendigung-id="<?php echo esc_attr($kuendigung->ID); ?>"
-                                        data-employee-id="<?php echo esc_attr($post->ID); ?>"
-                                        style="width: 100%;">
-                                        <?php _e('PDF versenden', 'rt-employee-manager-v2'); ?>
-                                    </button>
-                                </p>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
+                    <p><label style="display: block;">
+                            <input type="checkbox" class="send-to-bookkeeping" />
+                            <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                            <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
+                        </label></p>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
+
+                <p>
+                    <button type="button" class="button button-primary send-kuendigung-email"
+                        data-kuendigung-id="<?php echo esc_attr($kuendigung->ID); ?>"
+                        data-employee-id="<?php echo esc_attr($post->ID); ?>" style="width: 100%;">
+                        <?php _e('PDF versenden', 'rt-employee-manager-v2'); ?>
+                    </button>
+                </p>
+            </div>
         </div>
-        
-        <!-- Kündigung Modal -->
-        <div id="kuendigung-modal" style="display: none;">
-            <div class="kuendigung-modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100000; display: flex; align-items: center; justify-content: center;">
-                <div class="kuendigung-modal-content" style="background: #fff; padding: 30px; max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; border-radius: 4px; position: relative;">
-                    <button type="button" class="kuendigung-modal-close" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
-                    <h2 style="margin-top: 0;"><?php _e('Kündigung erstellen', 'rt-employee-manager-v2'); ?></h2>
-                    <form id="kuendigung-form" novalidate>
-                        <input type="hidden" id="kuendigung-employee-id" name="employee_id" value="<?php echo esc_attr($post->ID); ?>" />
-                        <?php wp_nonce_field('create_kuendigung_v2', 'kuendigung_nonce'); ?>
-                        
-                        <table class="form-table">
-                            <tr>
-                                <th scope="row"><label for="kuendigungsart"><?php _e('Kündigungsart', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td>
-                                    <select name="kuendigungsart" id="kuendigungsart">
-                                        <option value=""><?php _e('Bitte wählen', 'rt-employee-manager-v2'); ?></option>
-                                        <option value="Ordentliche"><?php _e('Ordentliche Kündigung', 'rt-employee-manager-v2'); ?></option>
-                                        <option value="Fristlose"><?php _e('Fristlose Kündigung', 'rt-employee-manager-v2'); ?></option>
-                                    </select>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="kuendigungsdatum"><?php _e('Kündigungsdatum', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td><input type="date" name="kuendigungsdatum" id="kuendigungsdatum" /></td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="beendigungsdatum"><?php _e('Beendigungsdatum (letzter Arbeitstag)', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td><input type="date" name="beendigungsdatum" id="beendigungsdatum" /></td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="kuendigungsgrund"><?php _e('Grund der Kündigung', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td><textarea name="kuendigungsgrund" id="kuendigungsgrund" rows="4" class="large-text"></textarea></td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="kuendigungsfrist"><?php _e('Kündigungsfrist', 'rt-employee-manager-v2'); ?></label></th>
-                                <td><input type="text" name="kuendigungsfrist" id="kuendigungsfrist" class="regular-text" placeholder="<?php _e('z.B. 1 Monat zum Monatsende', 'rt-employee-manager-v2'); ?>" /></td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="resturlaub"><?php _e('Resturlaub (Tage)', 'rt-employee-manager-v2'); ?></label></th>
-                                <td><input type="number" name="resturlaub" id="resturlaub" min="0" step="0.5" /></td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="ueberstunden"><?php _e('Überstunden (Stunden)', 'rt-employee-manager-v2'); ?></label></th>
-                                <td><input type="number" name="ueberstunden" id="ueberstunden" min="0" step="0.5" /></td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="employer_name"><?php _e('Aussteller (Firma/Kunde)', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td>
-                                    <?php
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+</div>
+
+<!-- Kündigung Modal -->
+<div id="kuendigung-modal" style="display: none;">
+    <div class="kuendigung-modal-overlay"
+        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100000; display: flex; align-items: center; justify-content: center;">
+        <div class="kuendigung-modal-content"
+            style="background: #fff; padding: 30px; max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; border-radius: 4px; position: relative;">
+            <button type="button" class="kuendigung-modal-close"
+                style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
+            <h2 style="margin-top: 0;"><?php _e('Kündigung erstellen', 'rt-employee-manager-v2'); ?></h2>
+            <form id="kuendigung-form" novalidate>
+                <input type="hidden" id="kuendigung-employee-id" name="employee_id"
+                    value="<?php echo esc_attr($post->ID); ?>" />
+                <?php wp_nonce_field('create_kuendigung_v2', 'kuendigung_nonce'); ?>
+
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><label
+                                for="kuendigungsart"><?php _e('Kündigungsart', 'rt-employee-manager-v2'); ?> *</label>
+                        </th>
+                        <td>
+                            <select name="kuendigungsart" id="kuendigungsart">
+                                <option value=""><?php _e('Bitte wählen', 'rt-employee-manager-v2'); ?></option>
+                                <option value="Ordentliche">
+                                    <?php _e('Ordentliche Kündigung', 'rt-employee-manager-v2'); ?></option>
+                                <option value="Fristlose"><?php _e('Fristlose Kündigung', 'rt-employee-manager-v2'); ?>
+                                </option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="kuendigungsdatum"><?php _e('Kündigungsdatum', 'rt-employee-manager-v2'); ?>
+                                *</label></th>
+                        <td><input type="date" name="kuendigungsdatum" id="kuendigungsdatum" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="beendigungsdatum"><?php _e('Beendigungsdatum (letzter Arbeitstag)', 'rt-employee-manager-v2'); ?>
+                                *</label></th>
+                        <td><input type="date" name="beendigungsdatum" id="beendigungsdatum" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="kuendigungsgrund"><?php _e('Grund der Kündigung', 'rt-employee-manager-v2'); ?>
+                                *</label></th>
+                        <td><textarea name="kuendigungsgrund" id="kuendigungsgrund" rows="4"
+                                class="large-text"></textarea></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="kuendigungsfrist"><?php _e('Kündigungsfrist', 'rt-employee-manager-v2'); ?></label>
+                        </th>
+                        <td><input type="text" name="kuendigungsfrist" id="kuendigungsfrist" class="regular-text"
+                                placeholder="<?php _e('z.B. 1 Monat zum Monatsende', 'rt-employee-manager-v2'); ?>" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="resturlaub"><?php _e('Resturlaub (Tage)', 'rt-employee-manager-v2'); ?></label>
+                        </th>
+                        <td><input type="number" name="resturlaub" id="resturlaub" min="0" step="0.5" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="ueberstunden"><?php _e('Überstunden (Stunden)', 'rt-employee-manager-v2'); ?></label>
+                        </th>
+                        <td><input type="number" name="ueberstunden" id="ueberstunden" min="0" step="0.5" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="employer_name"><?php _e('Aussteller (Firma/Kunde)', 'rt-employee-manager-v2'); ?>
+                                *</label></th>
+                        <td>
+                            <?php
                                     $current_user = wp_get_current_user();
                                     $employer_name = get_user_meta($current_user->ID, 'company_name', true) ?: $current_user->display_name;
                                     ?>
-                                    <input type="text" name="employer_name" id="employer_name" value="<?php echo esc_attr($employer_name); ?>" class="regular-text" />
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="employer_email"><?php _e('Aussteller E-Mail', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td>
-                                    <?php
+                            <input type="text" name="employer_name" id="employer_name"
+                                value="<?php echo esc_attr($employer_name); ?>" class="regular-text" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label
+                                for="employer_email"><?php _e('Aussteller E-Mail', 'rt-employee-manager-v2'); ?>
+                                *</label></th>
+                        <td>
+                            <?php
                                     $employer_email = $current_user->user_email;
                                     ?>
-                                    <input type="email" name="employer_email" id="employer_email" value="<?php echo esc_attr($employer_email); ?>" class="regular-text" />
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php _e('Optionen', 'rt-employee-manager-v2'); ?></th>
-                                <td>
-                                    <label><input type="checkbox" name="zeugnis_gewuenscht" id="zeugnis_gewuenscht" /> <?php _e('Zeugnis gewünscht', 'rt-employee-manager-v2'); ?></label><br>
-                                    <label><input type="checkbox" name="uebergabe_erledigt" id="uebergabe_erledigt" /> <?php _e('Übergabe erledigt', 'rt-employee-manager-v2'); ?></label>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="notes"><?php _e('Anmerkungen', 'rt-employee-manager-v2'); ?></label></th>
-                                <td><textarea name="notes" id="notes" rows="3" class="large-text"></textarea></td>
-                            </tr>
-                        </table>
-                        
-                        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
-                            <h3 style="margin-top: 0;"><?php _e('PDF per E-Mail versenden', 'rt-employee-manager-v2'); ?></h3>
-                            
-                            <?php
+                            <input type="email" name="employer_email" id="employer_email"
+                                value="<?php echo esc_attr($employer_email); ?>" class="regular-text" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php _e('Optionen', 'rt-employee-manager-v2'); ?></th>
+                        <td>
+                            <label><input type="checkbox" name="zeugnis_gewuenscht" id="zeugnis_gewuenscht" />
+                                <?php _e('Zeugnis gewünscht', 'rt-employee-manager-v2'); ?></label><br>
+                            <label><input type="checkbox" name="uebergabe_erledigt" id="uebergabe_erledigt" />
+                                <?php _e('Übergabe erledigt', 'rt-employee-manager-v2'); ?></label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="notes"><?php _e('Anmerkungen', 'rt-employee-manager-v2'); ?></label>
+                        </th>
+                        <td><textarea name="notes" id="notes" rows="3" class="large-text"></textarea></td>
+                    </tr>
+                </table>
+
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
+                    <h3 style="margin-top: 0;"><?php _e('PDF per E-Mail versenden', 'rt-employee-manager-v2'); ?></h3>
+
+                    <?php
                             $employee_data = $this->get_employee_data($post->ID);
                             $employee_email = $employee_data['email'] ?? '';
                             ?>
-                            
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 8px;">
-                                    <input type="email" id="kuendigung-employee-email" 
-                                        placeholder="<?php _e('Mitarbeiter E-Mail-Adresse', 'rt-employee-manager-v2'); ?>" 
-                                        value="<?php echo esc_attr($employee_email); ?>"
-                                        class="regular-text" style="width: 100%;" />
-                                </label>
-                            </div>
-                            
-                            <div class="email-options" style="margin-bottom: 15px;">
-                                <p><label style="display: block; margin-bottom: 5px;">
-                                    <input type="checkbox" id="send-to-employee-on-create" />
-                                    <?php _e('An Mitarbeiter senden', 'rt-employee-manager-v2'); ?>
-                                    <?php if ($employee_email): ?>
-                                        <strong>(<?php echo esc_html($employee_email); ?>)</strong>
-                                    <?php endif; ?>
-                                </label></p>
-                                
-                                <?php 
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px;">
+                            <?php _e('E-Mail-Adresse:', 'rt-employee-manager-v2'); ?>
+                            <input type="email" id="kuendigung-email-address"
+                                placeholder="<?php _e('E-Mail-Adresse eingeben', 'rt-employee-manager-v2'); ?>"
+                                value="<?php echo esc_attr($employee_email); ?>" class="regular-text"
+                                style="width: 100%; margin-top: 5px;" required />
+                        </label>
+                        <p class="description" style="font-size: 12px; color: #666; margin-top: 5px;">
+                            <?php _e('Das PDF wird an diese E-Mail-Adresse gesendet.', 'rt-employee-manager-v2'); ?>
+                        </p>
+                    </div>
+
+                    <div class="email-options" style="margin-bottom: 15px;">
+                        <?php 
                                 $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', '');
                                 if (!empty($buchhaltung_email)): 
                                 ?>
-                                <p><label style="display: block;">
-                                    <input type="checkbox" id="send-to-bookkeeping-on-create" />
-                                    <?php _e('An Buchhaltung senden', 'rt-employee-manager-v2'); ?>
-                                    <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
-                                </label></p>
-                                <?php else: ?>
-                                <p style="color: #666; font-style: italic; font-size: 12px;">
-                                    <?php _e('Buchhaltung E-Mail nicht konfiguriert.', 'rt-employee-manager-v2'); ?>
-                                    <a href="<?php echo admin_url('admin.php?page=rt-employee-manager-v2-settings'); ?>"><?php _e('Jetzt einrichten', 'rt-employee-manager-v2'); ?></a>
-                                </p>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        
-                        <p class="submit">
-                            <button type="submit" class="button button-primary"><?php _e('Kündigung erstellen und PDF versenden', 'rt-employee-manager-v2'); ?></button>
-                            <button type="button" class="button kuendigung-modal-close"><?php _e('Abbrechen', 'rt-employee-manager-v2'); ?></button>
+                        <p><label style="display: block;">
+                                <input type="checkbox" id="send-to-bookkeeping-on-create" />
+                                <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                                <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
+                            </label></p>
+                        <?php else: ?>
+                        <p style="color: #666; font-style: italic; font-size: 12px;">
+                            <?php _e('Buchhaltung E-Mail nicht konfiguriert.', 'rt-employee-manager-v2'); ?>
+                            <a
+                                href="<?php echo admin_url('admin.php?page=rt-employee-manager-v2-settings'); ?>"><?php _e('Jetzt einrichten', 'rt-employee-manager-v2'); ?></a>
                         </p>
-                    </form>
+                        <?php endif; ?>
+                    </div>
                 </div>
-            </div>
+
+                <p class="submit">
+                    <button type="submit"
+                        class="button button-primary"><?php _e('Kündigung erstellen und PDF versenden', 'rt-employee-manager-v2'); ?></button>
+                    <button type="button"
+                        class="button kuendigung-modal-close"><?php _e('Abbrechen', 'rt-employee-manager-v2'); ?></button>
+                </p>
+            </form>
         </div>
-        <?php
+    </div>
+</div>
+<?php
     }
     
     /**
@@ -345,10 +394,48 @@ class RT_Kuendigung_Handler_V2 {
                 }
                 
                 $(document).ready(function() {
+                    // Function to update button state based on status
+                    function updateKuendigungButtonState() {
+                        var statusField = $("#status");
+                        var statusValue = statusField.val();
+                        var createBtn = $("#create-kuendigung-btn");
+                        var statusNotice = $(".kuendigung-status-notice");
+                        
+                        if (statusValue === "terminated") {
+                            // Status is Ausgeschieden - disable button
+                            createBtn.prop("disabled", true);
+                            if (statusNotice.length === 0) {
+                                createBtn.before("<div class=\"kuendigung-status-notice\" style=\"padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404; margin-bottom: 10px;\"><strong>Mitarbeiter bereits ausgeschieden</strong><br><small>Der Beschäftigungsstatus ist bereits auf \"Ausgeschieden\" gesetzt. Ändern Sie den Status auf \"Beschäftigt\", um eine neue Kündigung zu erstellen.</small></div>");
+                            } else {
+                                statusNotice.show();
+                            }
+                        } else {
+                            // Status is not terminated - enable button
+                            createBtn.prop("disabled", false);
+                            statusNotice.hide();
+                        }
+                    }
+                    
+                    // Check initial state
+                    updateKuendigungButtonState();
+                    
+                    // Watch for status changes
+                    $("#status").on("change", function() {
+                        updateKuendigungButtonState();
+                    });
+                    
                     // Open modal
                     $("#create-kuendigung-btn").on("click", function(e) {
                         e.preventDefault();
                         e.stopPropagation();
+                        
+                        // Check status before opening modal
+                        var currentStatus = $("#status").val();
+                        if (currentStatus === "terminated") {
+                            alert("Der Mitarbeiter ist bereits ausgeschieden. Bitte ändern Sie den Beschäftigungsstatus zuerst.");
+                            return;
+                        }
+                        
                         $("#kuendigung-modal").show();
                     });
                     
@@ -411,30 +498,27 @@ class RT_Kuendigung_Handler_V2 {
                         var originalText = submitBtn.text();
                         
                         // Get email options
-                        var employeeEmail = $("#kuendigung-employee-email").val().trim();
-                        var sendToEmployee = $("#send-to-employee-on-create").is(":checked");
+                        var emailAddress = $("#kuendigung-email-address").val().trim();
                         var sendToBookkeeping = $("#send-to-bookkeeping-on-create").is(":checked");
                         
-                        // Validation if sending emails
-                        if (sendToEmployee || sendToBookkeeping) {
-                            if (sendToEmployee && !employeeEmail) {
-                                alert("Bitte geben Sie die Mitarbeiter-E-Mail-Adresse ein, wenn Sie an den Mitarbeiter senden möchten.");
-                                $("#kuendigung-employee-email").focus();
-                                return false;
-                            }
-                            if (sendToEmployee && !isValidEmail(employeeEmail)) {
-                                alert("Bitte geben Sie eine gültige Mitarbeiter-E-Mail-Adresse ein.");
-                                $("#kuendigung-employee-email").focus();
-                                return false;
-                            }
+                        // Validate email address (required)
+                        if (!emailAddress) {
+                            alert("Bitte geben Sie eine E-Mail-Adresse ein.");
+                            $("#kuendigung-email-address").focus();
+                            return false;
+                        }
+                        
+                        if (!isValidEmail(emailAddress)) {
+                            alert("Bitte geben Sie eine gültige E-Mail-Adresse ein.");
+                            $("#kuendigung-email-address").focus();
+                            return false;
                         }
                         
                         submitBtn.prop("disabled", true).text("Erstelle Kündigung...");
                         
                         // Add email options to form data
                         var data = formData + "&action=create_kuendigung_v2";
-                        data += "&employee_email=" + encodeURIComponent(employeeEmail);
-                        data += "&send_to_employee=" + (sendToEmployee ? "1" : "");
+                        data += "&email_address=" + encodeURIComponent(emailAddress);
                         data += "&send_to_bookkeeping=" + (sendToBookkeeping ? "1" : "");
                         
                         $.ajax({
@@ -443,16 +527,17 @@ class RT_Kuendigung_Handler_V2 {
                             data: data,
                             success: function(response) {
                                 if (response.success) {
+                                    // Close modal
+                                    $("#kuendigung-modal").hide();
                                     alert("✓ " + response.data.message);
                                     location.reload();
                                 } else {
                                     alert("Fehler: " + response.data);
+                                    submitBtn.prop("disabled", false).text(originalText);
                                 }
                             },
                             error: function() {
                                 alert("Fehler beim Erstellen der Kündigung");
-                            },
-                            complete: function() {
                                 submitBtn.prop("disabled", false).text(originalText);
                             }
                         });
@@ -622,34 +707,28 @@ class RT_Kuendigung_Handler_V2 {
             update_post_meta($kuendigung_id, $key, $value);
         }
         
-        // Update employee status to terminated
+        // Update employee status to terminated (Ausgeschieden)
         update_post_meta($employee_id, 'status', 'terminated');
         
-        // Check if emails should be sent
-        $employee_email = sanitize_email($_POST['employee_email'] ?? '');
-        $send_to_employee = !empty($_POST['send_to_employee']);
+        // Get email address and options
+        $email_address = sanitize_email($_POST['email_address'] ?? '');
         $send_to_bookkeeping = !empty($_POST['send_to_bookkeeping']);
+        
+        // Validate email address
+        if (empty($email_address)) {
+            wp_send_json_error(__('Bitte geben Sie eine E-Mail-Adresse ein.', 'rt-employee-manager-v2'));
+        }
         
         $message = __('Kündigung erstellt.', 'rt-employee-manager-v2');
         
-        // Send emails if requested
-        if ($send_to_employee || $send_to_bookkeeping) {
-            // Validate employee email if sending to employee
-            if ($send_to_employee && empty($employee_email)) {
-                wp_send_json_error(__('Bitte geben Sie die Mitarbeiter-E-Mail-Adresse ein, wenn Sie an den Mitarbeiter senden möchten.', 'rt-employee-manager-v2'));
-            }
-            
-            // Generate PDF and send email
-            $pdf_generator = new RT_Kuendigung_PDF_Generator_V2();
-            $result = $pdf_generator->send_kuendigung_email_manual($kuendigung_id, $employee_id, $employee_email, $send_to_employee, $send_to_bookkeeping);
-            
-            if ($result['success']) {
-                $message .= ' ' . __('PDF erfolgreich per E-Mail versendet.', 'rt-employee-manager-v2');
-            } else {
-                $message .= ' ' . __('Kündigung erstellt, aber E-Mail-Versand fehlgeschlagen: ', 'rt-employee-manager-v2') . ($result['error'] ?? __('Unbekannter Fehler', 'rt-employee-manager-v2'));
-            }
+        // Generate PDF and send email
+        $pdf_generator = new RT_Kuendigung_PDF_Generator_V2();
+        $result = $pdf_generator->send_kuendigung_email_manual($kuendigung_id, $employee_id, $email_address, true, $send_to_bookkeeping);
+        
+        if ($result['success']) {
+            $message .= ' ' . __('PDF erfolgreich per E-Mail versendet. Beschäftigungsstatus wurde auf "Ausgeschieden" geändert.', 'rt-employee-manager-v2');
         } else {
-            $message .= ' ' . __('Sie können das PDF jetzt per E-Mail versenden.', 'rt-employee-manager-v2');
+            $message .= ' ' . __('Kündigung erstellt und Beschäftigungsstatus auf "Ausgeschieden" geändert, aber E-Mail-Versand fehlgeschlagen: ', 'rt-employee-manager-v2') . ($result['error'] ?? __('Unbekannter Fehler', 'rt-employee-manager-v2'));
         }
         
         wp_send_json_success(array(

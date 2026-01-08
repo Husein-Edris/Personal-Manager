@@ -438,12 +438,12 @@ class RT_Kuendigung_PDF_Generator_V2 {
      * 
      * @param int $kuendigung_id The Kündigung post ID
      * @param int $employee_id The employee post ID
-     * @param string $employee_email The employee email address
-     * @param bool $send_to_employee Whether to send to employee
+     * @param string $email_address The email address to send to
+     * @param bool $send_to_employee Whether to send to the email address (always true now)
      * @param bool $send_to_bookkeeping Whether to send to bookkeeping
      * @return array Result with success status and optional error message
      */
-    public function send_kuendigung_email_manual($kuendigung_id, $employee_id, $employee_email, $send_to_employee, $send_to_bookkeeping) {
+    public function send_kuendigung_email_manual($kuendigung_id, $employee_id, $email_address, $send_to_employee, $send_to_bookkeeping) {
         // Generate PDF
         $pdf_content = $this->generate_kuendigung_pdf_content($kuendigung_id, $employee_id);
         if ($pdf_content === false) {
@@ -459,11 +459,11 @@ class RT_Kuendigung_PDF_Generator_V2 {
         $kuendigung_data = $this->get_kuendigung_data($kuendigung_id);
         $employee_data = $this->get_employee_data($employee_id);
         
-        // Build recipients list
+        // Build recipients list - always send to the provided email address
         $recipients = array();
         
-        if ($send_to_employee && !empty($employee_email)) {
-            $recipients[] = $employee_email;
+        if (!empty($email_address)) {
+            $recipients[] = sanitize_email($email_address);
         }
         
         if ($send_to_bookkeeping) {
@@ -476,6 +476,10 @@ class RT_Kuendigung_PDF_Generator_V2 {
         if (empty($recipients)) {
             return array('success' => false, 'error' => 'No recipients selected');
         }
+        
+        // Log for debugging
+        error_log('RT Employee Manager V2: Sending Kündigung email to: ' . implode(', ', $recipients));
+        error_log('RT Employee Manager V2: PDF file: ' . $pdf_file);
         
         // Email subject
         $employee_name = trim(($employee_data['vorname'] ?? '') . ' ' . ($employee_data['nachname'] ?? ''));
@@ -504,8 +508,24 @@ class RT_Kuendigung_PDF_Generator_V2 {
             'From: ' . $sender_name . ' <' . $sender_email . '>'
         );
         
+        // Check if PDF file exists
+        if (!file_exists($pdf_file)) {
+            error_log('RT Employee Manager V2: PDF file does not exist: ' . $pdf_file);
+            return array('success' => false, 'error' => 'PDF file not found');
+        }
+        
+        error_log('RT Employee Manager V2: PDF file exists, size: ' . filesize($pdf_file) . ' bytes');
+        
         // Send email
         $sent = wp_mail($recipients, $subject, $body, $headers, array($pdf_file));
+        
+        // Check for wp_mail errors
+        global $phpmailer;
+        if (!$sent && isset($phpmailer) && !empty($phpmailer->ErrorInfo)) {
+            $error_message = $phpmailer->ErrorInfo;
+            error_log('RT Employee Manager V2: wp_mail error: ' . $error_message);
+            return array('success' => false, 'error' => 'wp_mail failed: ' . $error_message);
+        }
         
         if ($sent) {
             // Store email info in meta
@@ -513,9 +533,11 @@ class RT_Kuendigung_PDF_Generator_V2 {
             update_post_meta($kuendigung_id, 'email_sent_date', current_time('mysql'));
             update_post_meta($kuendigung_id, 'email_recipients', implode(', ', $recipients));
             
+            error_log('RT Employee Manager V2: Kündigung email sent successfully to: ' . implode(', ', $recipients));
             return array('success' => true);
         } else {
-            return array('success' => false, 'error' => 'wp_mail failed');
+            error_log('RT Employee Manager V2: wp_mail returned false, but no error info available');
+            return array('success' => false, 'error' => 'wp_mail returned false');
         }
     }
 }
