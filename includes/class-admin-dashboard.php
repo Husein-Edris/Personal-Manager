@@ -355,7 +355,6 @@ class RT_Admin_Dashboard_V2 {
      */
     public function register_settings() {
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_buchhaltung_email');
-        register_setting('rt_employee_v2_settings', 'rt_employee_v2_company_address');
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_pdf_template_header');
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_pdf_template_footer');
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_email_subject_template');
@@ -371,7 +370,6 @@ class RT_Admin_Dashboard_V2 {
     public function settings_page() {
         if (isset($_POST['submit'])) {
             update_option('rt_employee_v2_buchhaltung_email', sanitize_email($_POST['buchhaltung_email']));
-            update_option('rt_employee_v2_company_address', sanitize_textarea_field($_POST['company_address']));
             update_option('rt_employee_v2_pdf_template_header', sanitize_textarea_field($_POST['pdf_template_header']));
             update_option('rt_employee_v2_pdf_template_footer', sanitize_textarea_field($_POST['pdf_template_footer']));
             update_option('rt_employee_v2_email_subject_template', sanitize_text_field($_POST['email_subject_template']));
@@ -383,7 +381,6 @@ class RT_Admin_Dashboard_V2 {
         }
 
         $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', '');
-        $company_address = get_option('rt_employee_v2_company_address', '');
         $pdf_header = get_option('rt_employee_v2_pdf_template_header', '');
         $pdf_footer = get_option('rt_employee_v2_pdf_template_footer', '');
         $email_subject = get_option('rt_employee_v2_email_subject_template', 'Mitarbeiterdaten: {FIRSTNAME} {LASTNAME} - {KUNDE}');
@@ -477,22 +474,6 @@ class RT_Admin_Dashboard_V2 {
                             <td>
                                 <textarea id="email_body_template" name="email_body_template" rows="10" class="large-text"><?php echo esc_textarea($email_body); ?></textarea>
                                 <p class="description"><?php _e('Der hier eingegebene Text überschreibt die Standard-Nachricht. Platzhalter werden automatisch ersetzt. Leer lassen für Standard-Nachricht.', 'rt-employee-manager-v2'); ?></p>
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px;">
-                    <h2><?php _e('Firmendaten', 'rt-employee-manager-v2'); ?></h2>
-                    
-                    <table class="form-table">
-                        <tr>
-                            <th scope="row">
-                                <label for="company_address"><?php _e('Firmenadresse', 'rt-employee-manager-v2'); ?></label>
-                            </th>
-                            <td>
-                                <textarea id="company_address" name="company_address" rows="4" class="large-text"><?php echo esc_textarea($company_address); ?></textarea>
-                                <p class="description"><?php _e('Vollständige Firmenadresse für PDF-Header', 'rt-employee-manager-v2'); ?></p>
                             </td>
                         </tr>
                     </table>

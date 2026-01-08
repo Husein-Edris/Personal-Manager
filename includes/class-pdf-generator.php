@@ -454,6 +454,13 @@ class RT_PDF_Generator_V2 {
         try {
             // Use DomPDF to convert HTML to PDF
             $dompdf = new \Dompdf\Dompdf();
+            
+            // Configure DomPDF options for better image handling
+            $options = $dompdf->getOptions();
+            $options->set('isRemoteEnabled', true); // Allow remote resources if needed
+            $options->set('isHtml5ParserEnabled', true); // Enable HTML5 parser
+            
+            $dompdf->setOptions($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
@@ -462,6 +469,7 @@ class RT_PDF_Generator_V2 {
             return $dompdf->output();
         } catch (Exception $e) {
             error_log('RT Employee Manager V2: PDF generation error: ' . $e->getMessage());
+            error_log('RT Employee Manager V2: PDF generation stack trace: ' . $e->getTraceAsString());
             return false;
         }
     }
@@ -788,11 +796,35 @@ class RT_PDF_Generator_V2 {
             $working_days_list = implode(', ', $days);
         }
         
-        // Get logo URL if set
+        // Get logo URL if set - convert to data URI for DomPDF (most reliable method)
         $logo_id = get_option('rt_employee_v2_pdf_logo', 0);
-        $logo_url = '';
+        $logo_data_uri = '';
         if ($logo_id) {
-            $logo_url = wp_get_attachment_image_url($logo_id, 'full');
+            // Get the attachment file path
+            $logo_path = get_attached_file($logo_id);
+            if ($logo_path && file_exists($logo_path)) {
+                // Get MIME type
+                $mime_type = get_post_mime_type($logo_id);
+                if (empty($mime_type)) {
+                    // Fallback: detect from file extension
+                    $file_ext = strtolower(pathinfo($logo_path, PATHINFO_EXTENSION));
+                    $mime_types = array(
+                        'jpg' => 'image/jpeg',
+                        'jpeg' => 'image/jpeg',
+                        'png' => 'image/png',
+                        'gif' => 'image/gif',
+                        'webp' => 'image/webp',
+                        'svg' => 'image/svg+xml'
+                    );
+                    $mime_type = isset($mime_types[$file_ext]) ? $mime_types[$file_ext] : 'image/jpeg';
+                }
+                
+                // Convert image to base64 data URI (most reliable for DomPDF)
+                $image_data = file_get_contents($logo_path);
+                if ($image_data !== false) {
+                    $logo_data_uri = 'data:' . $mime_type . ';base64,' . base64_encode($image_data);
+                }
+            }
         }
         
         // Get header and footer text from settings
@@ -836,7 +868,7 @@ class RT_PDF_Generator_V2 {
 </head>
 <body>
     <div class=\"pdf-header\">
-        <div class=\"pdf-header-left\">" . ($logo_url ? '<img src="' . esc_url($logo_url) . '" alt="Logo" class="pdf-logo" />' : '') . "</div>
+        <div class=\"pdf-header-left\">" . ($logo_data_uri ? '<img src="' . esc_attr($logo_data_uri) . '" alt="Logo" class="pdf-logo" />' : '') . "</div>
         <div class=\"pdf-header-right\">
             <div class=\"pdf-header-text\">" . nl2br(esc_html($pdf_header_text)) . "</div>
         </div>
