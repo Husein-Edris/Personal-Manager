@@ -640,155 +640,189 @@ class RT_Employee_Meta_Boxes_V2 {
         if ($hook !== 'post.php' && $hook !== 'post-new.php') {
             return;
         }
-        
+
         global $post_type;
         if ($post_type !== 'angestellte_v2') {
             return;
         }
+
+        // Use jquery as dependency since it's always available in WP admin
+        wp_enqueue_script('jquery');
         
-        // Austrian SVNR validation script
-        wp_add_inline_script('wp-blocks', '
-            document.addEventListener("DOMContentLoaded", function() {
-                const svnrField = document.getElementById("sozialversicherungsnummer");
-                if (svnrField) {
-                    // Only allow numbers, max 10 digits
-                    svnrField.addEventListener("input", function(e) {
-                        e.target.value = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
-                    });
-                    
-                    // Prevent non-numeric keystrokes
-                    svnrField.addEventListener("keypress", function(e) {
-                        if (!/[0-9]/.test(e.key) && !["Backspace", "Delete", "Tab", "Enter", "ArrowLeft", "ArrowRight"].includes(e.key)) {
-                            e.preventDefault();
-                        }
-                    });
-                    
-                    // Handle paste events
-                    svnrField.addEventListener("paste", function(e) {
-                        e.preventDefault();
-                        const paste = (e.clipboardData || window.clipboardData).getData("text");
-                        const numbersOnly = paste.replace(/[^0-9]/g, "").slice(0, 10);
-                        e.target.value = numbersOnly;
-                        e.target.dispatchEvent(new Event("input"));
-                    });
-                    
-                    // Validate on blur
-                    svnrField.addEventListener("blur", function(e) {
-                        const svnr = e.target.value;
-                        if (svnr && !validateAustrianSVNR(svnr)) {
-                            e.target.style.borderColor = "#dc3232";
-                            showSVNRError("Bitte geben Sie genau 10 Ziffern ein");
-                        } else {
-                            e.target.style.borderColor = "";
-                            hideSVNRError();
-                        }
-                    });
-                }
-                
-                // Simple SVNR validation function - only check for 10 digits
-                function validateAustrianSVNR(svnr) {
-                    return /^\d{10}$/.test(svnr);
-                }
-                
-                function showSVNRError(message) {
-                    let errorDiv = document.getElementById("svnr-error");
-                    if (!errorDiv) {
-                        errorDiv = document.createElement("div");
-                        errorDiv.id = "svnr-error";
-                        errorDiv.style.color = "#dc3232";
-                        errorDiv.style.fontSize = "12px";
-                        errorDiv.style.marginTop = "5px";
-                        svnrField.parentNode.appendChild(errorDiv);
-                    }
-                    errorDiv.textContent = message;
-                }
-                
-                function hideSVNRError() {
-                    const errorDiv = document.getElementById("svnr-error");
-                    if (errorDiv) errorDiv.remove();
-                }
-                
-                // PDF Email functionality
-                const sendEmailBtn = document.getElementById("send-pdf-email");
-                if (sendEmailBtn) {
-                    sendEmailBtn.addEventListener("click", function() {
-                        const emailInput = document.getElementById("pdf-email");
-                        const sendToCustomer = document.getElementById("send-to-kunde");
-                        const sendToBookkeeping = document.getElementById("send-to-bookkeeping");
-                        
-                        const customerEmail = emailInput ? emailInput.value.trim() : "";
-                        const shouldSendToCustomer = sendToCustomer ? sendToCustomer.checked : false;
-                        const shouldSendToBookkeeping = sendToBookkeeping ? sendToBookkeeping.checked : false;
-                        
-                        // Validation
-                        if (!shouldSendToCustomer && !shouldSendToBookkeeping) {
-                            alert("Bitte wählen Sie mindestens einen Empfänger aus.");
-                            return;
-                        }
-                        
-                        if (shouldSendToCustomer && !customerEmail) {
-                            alert("Bitte geben Sie eine E-Mail-Adresse ein.");
-                            emailInput.focus();
-                            return;
-                        }
-                        
-                        // Disable button and show loading
-                        sendEmailBtn.disabled = true;
-                        sendEmailBtn.textContent = "Sende E-Mail...";
-                        
-                        // Get current post ID
-                        const postId = document.getElementById("post_ID") ? document.getElementById("post_ID").value : "";
-                        
-                        // Send AJAX request
-                        fetch(ajaxurl, {
-                            method: "POST",
-                            headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                            body: new URLSearchParams({
-                                action: "email_employee_pdf",
-                                employee_id: postId,
-                                customer_email: customerEmail,
-                                send_to_customer: shouldSendToCustomer ? "1" : "",
-                                send_to_bookkeeping: shouldSendToBookkeeping ? "1" : "",
-                                nonce: "' . wp_create_nonce('email_pdf_v2') . '"
-                            })
-                        })
-                        .then(response => {
-                            console.log("Response status:", response.status);
-                            console.log("Response headers:", response.headers);
-                            return response.text();
-                        })
-                        .then(text => {
-                            console.log("Raw response:", text);
-                            try {
-                                const data = JSON.parse(text);
-                                if (data.success) {
-                                    alert("✓ " + data.data.message);
-                                    // Reset form
-                                    if (emailInput) emailInput.value = "";
-                                    if (sendToCustomer) sendToCustomer.checked = false;
-                                    if (sendToBookkeeping) sendToBookkeeping.checked = false;
-                                } else {
-                                    alert("Fehler: " + data.data);
-                                }
-                            } catch (e) {
-                                console.error("JSON parse error:", e);
-                                alert("Server response error: " + text.substring(0, 200));
-                            }
-                        })
-                        .catch(error => {
-                            console.error("Fetch error:", error);
-                            alert("Fehler beim Senden: " + error);
-                        })
-                        .finally(() => {
-                            // Re-enable button
-                            sendEmailBtn.disabled = false;
-                            sendEmailBtn.textContent = "PDF versenden";
+        // Localize script with AJAX URL and nonce
+        wp_localize_script('jquery', 'rtEmployeeManagerV2', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('email_pdf_v2')
+        ));
+        
+        wp_add_inline_script('jquery', '
+            (function($) {
+                $(document).ready(function() {
+                    const svnrField = document.getElementById("sozialversicherungsnummer");
+                    if (svnrField) {
+                        // Only allow numbers, max 10 digits
+                        svnrField.addEventListener("input", function(e) {
+                            e.target.value = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
                         });
-                    });
-                }
-                
-                console.log("RT Employee Manager V2: Meta box with SVNR validation and email functionality loaded");
-            });
+                        
+                        // Prevent non-numeric keystrokes
+                        svnrField.addEventListener("keypress", function(e) {
+                            if (!/[0-9]/.test(e.key) && !["Backspace", "Delete", "Tab", "Enter", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+                                e.preventDefault();
+                            }
+                        });
+                        
+                        // Handle paste events
+                        svnrField.addEventListener("paste", function(e) {
+                            e.preventDefault();
+                            const paste = (e.clipboardData || window.clipboardData).getData("text");
+                            const numbersOnly = paste.replace(/[^0-9]/g, "").slice(0, 10);
+                            e.target.value = numbersOnly;
+                            e.target.dispatchEvent(new Event("input"));
+                        });
+                        
+                        // Validate on blur
+                        svnrField.addEventListener("blur", function(e) {
+                            const svnr = e.target.value;
+                            if (svnr && !validateAustrianSVNR(svnr)) {
+                                e.target.style.borderColor = "#dc3232";
+                                showSVNRError("Bitte geben Sie genau 10 Ziffern ein");
+                            } else {
+                                e.target.style.borderColor = "";
+                                hideSVNRError();
+                            }
+                        });
+                    }
+                    
+                    // Simple SVNR validation function - only check for 10 digits
+                    function validateAustrianSVNR(svnr) {
+                        return /^\d{10}$/.test(svnr);
+                    }
+                    
+                    function showSVNRError(message) {
+                        let errorDiv = document.getElementById("svnr-error");
+                        if (!errorDiv) {
+                            errorDiv = document.createElement("div");
+                            errorDiv.id = "svnr-error";
+                            errorDiv.style.color = "#dc3232";
+                            errorDiv.style.fontSize = "12px";
+                            errorDiv.style.marginTop = "5px";
+                            svnrField.parentNode.appendChild(errorDiv);
+                        }
+                        errorDiv.textContent = message;
+                    }
+                    
+                    function hideSVNRError() {
+                        const errorDiv = document.getElementById("svnr-error");
+                        if (errorDiv) errorDiv.remove();
+                    }
+                    
+                    // PDF Email functionality
+                    const sendEmailBtn = document.getElementById("send-pdf-email");
+                    if (sendEmailBtn) {
+                        sendEmailBtn.addEventListener("click", function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            const emailInput = document.getElementById("pdf-email");
+                            const sendToCustomer = document.getElementById("send-to-kunde");
+                            const sendToBookkeeping = document.getElementById("send-to-bookkeeping");
+                            
+                            const customerEmail = emailInput ? emailInput.value.trim() : "";
+                            const shouldSendToCustomer = sendToCustomer ? sendToCustomer.checked : false;
+                            const shouldSendToBookkeeping = sendToBookkeeping ? sendToBookkeeping.checked : false;
+                            
+                            // Validation
+                            if (!shouldSendToCustomer && !shouldSendToBookkeeping) {
+                                alert("Bitte wählen Sie mindestens einen Empfänger aus.");
+                                return;
+                            }
+                            
+                            if (shouldSendToCustomer && !customerEmail) {
+                                alert("Bitte geben Sie eine E-Mail-Adresse ein.");
+                                emailInput.focus();
+                                return;
+                            }
+                            
+                            // Basic email validation
+                            if (shouldSendToCustomer && customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+                                alert("Bitte geben Sie eine gültige E-Mail-Adresse ein.");
+                                emailInput.focus();
+                                return;
+                            }
+                            
+                            // Disable button and show loading
+                            sendEmailBtn.disabled = true;
+                            const originalText = sendEmailBtn.textContent;
+                            sendEmailBtn.textContent = "Sende E-Mail...";
+                            
+                            // Get current post ID
+                            const postId = document.getElementById("post_ID") ? document.getElementById("post_ID").value : "";
+                            
+                            if (!postId) {
+                                alert("Fehler: Mitarbeiter-ID konnte nicht gefunden werden.");
+                                sendEmailBtn.disabled = false;
+                                sendEmailBtn.textContent = originalText;
+                                return;
+                            }
+                            
+                            // Send AJAX request
+                            const ajaxUrl = typeof rtEmployeeManagerV2 !== "undefined" ? rtEmployeeManagerV2.ajaxurl : "' . esc_js(admin_url('admin-ajax.php')) . '";
+                            const nonce = typeof rtEmployeeManagerV2 !== "undefined" ? rtEmployeeManagerV2.nonce : "' . wp_create_nonce('email_pdf_v2') . '";
+                            
+                            fetch(ajaxUrl, {
+                                method: "POST",
+                                headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                                body: new URLSearchParams({
+                                    action: "email_employee_pdf",
+                                    employee_id: postId,
+                                    customer_email: customerEmail,
+                                    send_to_customer: shouldSendToCustomer ? "1" : "",
+                                    send_to_bookkeeping: shouldSendToBookkeeping ? "1" : "",
+                                    nonce: nonce
+                                })
+                            })
+                            .then(response => {
+                                console.log("Response status:", response.status);
+                                return response.text();
+                            })
+                            .then(text => {
+                                console.log("Raw response:", text);
+                                try {
+                                    const data = JSON.parse(text);
+                                    if (data.success) {
+                                        alert("✓ " + data.data.message);
+                                        // Reset form
+                                        if (emailInput) emailInput.value = "";
+                                        if (sendToCustomer) sendToCustomer.checked = false;
+                                        if (sendToBookkeeping) sendToBookkeeping.checked = false;
+                                    } else {
+                                        alert("Fehler: " + (data.data || "Unbekannter Fehler"));
+                                    }
+                                } catch (e) {
+                                    console.error("JSON parse error:", e, "Response:", text);
+                                    alert("Server response error: " + text.substring(0, 200));
+                                }
+                            })
+                            .catch(error => {
+                                console.error("Fetch error:", error);
+                                alert("Fehler beim Senden: " + error.message);
+                            })
+                            .finally(() => {
+                                // Re-enable button
+                                sendEmailBtn.disabled = false;
+                                sendEmailBtn.textContent = originalText;
+                            });
+                        });
+                        
+                        console.log("RT Employee Manager V2: PDF email button event listener attached");
+                    } else {
+                        console.warn("RT Employee Manager V2: send-pdf-email button not found");
+                    }
+                    
+                    console.log("RT Employee Manager V2: Meta box with SVNR validation and email functionality loaded");
+                });
+            })(jQuery);
         ');
     }
 }
