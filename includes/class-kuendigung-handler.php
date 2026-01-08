@@ -191,7 +191,7 @@ class RT_Kuendigung_Handler_V2 {
                 <div class="kuendigung-modal-content" style="background: #fff; padding: 30px; max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; border-radius: 4px; position: relative;">
                     <button type="button" class="kuendigung-modal-close" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
                     <h2 style="margin-top: 0;"><?php _e('Kündigung erstellen', 'rt-employee-manager-v2'); ?></h2>
-                    <form id="kuendigung-form">
+                    <form id="kuendigung-form" novalidate>
                         <input type="hidden" id="kuendigung-employee-id" name="employee_id" value="<?php echo esc_attr($post->ID); ?>" />
                         <?php wp_nonce_field('create_kuendigung_v2', 'kuendigung_nonce'); ?>
                         
@@ -199,7 +199,7 @@ class RT_Kuendigung_Handler_V2 {
                             <tr>
                                 <th scope="row"><label for="kuendigungsart"><?php _e('Kündigungsart', 'rt-employee-manager-v2'); ?> *</label></th>
                                 <td>
-                                    <select name="kuendigungsart" id="kuendigungsart" required>
+                                    <select name="kuendigungsart" id="kuendigungsart">
                                         <option value=""><?php _e('Bitte wählen', 'rt-employee-manager-v2'); ?></option>
                                         <option value="Ordentliche"><?php _e('Ordentliche Kündigung', 'rt-employee-manager-v2'); ?></option>
                                         <option value="Fristlose"><?php _e('Fristlose Kündigung', 'rt-employee-manager-v2'); ?></option>
@@ -208,15 +208,15 @@ class RT_Kuendigung_Handler_V2 {
                             </tr>
                             <tr>
                                 <th scope="row"><label for="kuendigungsdatum"><?php _e('Kündigungsdatum', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td><input type="date" name="kuendigungsdatum" id="kuendigungsdatum" required /></td>
+                                <td><input type="date" name="kuendigungsdatum" id="kuendigungsdatum" /></td>
                             </tr>
                             <tr>
                                 <th scope="row"><label for="beendigungsdatum"><?php _e('Beendigungsdatum (letzter Arbeitstag)', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td><input type="date" name="beendigungsdatum" id="beendigungsdatum" required /></td>
+                                <td><input type="date" name="beendigungsdatum" id="beendigungsdatum" /></td>
                             </tr>
                             <tr>
                                 <th scope="row"><label for="kuendigungsgrund"><?php _e('Grund der Kündigung', 'rt-employee-manager-v2'); ?> *</label></th>
-                                <td><textarea name="kuendigungsgrund" id="kuendigungsgrund" rows="4" class="large-text" required></textarea></td>
+                                <td><textarea name="kuendigungsgrund" id="kuendigungsgrund" rows="4" class="large-text"></textarea></td>
                             </tr>
                             <tr>
                                 <th scope="row"><label for="kuendigungsfrist"><?php _e('Kündigungsfrist', 'rt-employee-manager-v2'); ?></label></th>
@@ -237,7 +237,7 @@ class RT_Kuendigung_Handler_V2 {
                                     $current_user = wp_get_current_user();
                                     $employer_name = get_user_meta($current_user->ID, 'company_name', true) ?: $current_user->display_name;
                                     ?>
-                                    <input type="text" name="employer_name" id="employer_name" value="<?php echo esc_attr($employer_name); ?>" class="regular-text" required />
+                                    <input type="text" name="employer_name" id="employer_name" value="<?php echo esc_attr($employer_name); ?>" class="regular-text" />
                                 </td>
                             </tr>
                             <tr>
@@ -246,7 +246,7 @@ class RT_Kuendigung_Handler_V2 {
                                     <?php
                                     $employer_email = $current_user->user_email;
                                     ?>
-                                    <input type="email" name="employer_email" id="employer_email" value="<?php echo esc_attr($employer_email); ?>" class="regular-text" required />
+                                    <input type="email" name="employer_email" id="employer_email" value="<?php echo esc_attr($employer_email); ?>" class="regular-text" />
                                 </td>
                             </tr>
                             <tr>
@@ -338,15 +338,23 @@ class RT_Kuendigung_Handler_V2 {
         
         wp_add_inline_script('jquery', '
             (function($) {
+                // Email validation helper
+                function isValidEmail(email) {
+                    var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    return re.test(email);
+                }
+                
                 $(document).ready(function() {
                     // Open modal
-                    $("#create-kuendigung-btn").on("click", function() {
+                    $("#create-kuendigung-btn").on("click", function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
                         $("#kuendigung-modal").show();
                     });
                     
                     // Close modal
                     $(".kuendigung-modal-close, .kuendigung-modal-overlay").on("click", function(e) {
-                        if (e.target === this) {
+                        if (e.target === this || $(e.target).hasClass("kuendigung-modal-close")) {
                             $("#kuendigung-modal").hide();
                         }
                     });
@@ -354,6 +362,49 @@ class RT_Kuendigung_Handler_V2 {
                     // Submit form
                     $("#kuendigung-form").on("submit", function(e) {
                         e.preventDefault();
+                        e.stopPropagation();
+                        
+                        // Manual validation
+                        var kuendigungsart = $("#kuendigungsart").val();
+                        var kuendigungsdatum = $("#kuendigungsdatum").val();
+                        var beendigungsdatum = $("#beendigungsdatum").val();
+                        var kuendigungsgrund = $("#kuendigungsgrund").val().trim();
+                        var employer_name = $("#employer_name").val().trim();
+                        var employer_email = $("#employer_email").val().trim();
+                        
+                        var errors = [];
+                        if (!kuendigungsart) {
+                            errors.push("Bitte wählen Sie die Kündigungsart aus.");
+                            $("#kuendigungsart").focus();
+                        }
+                        if (!kuendigungsdatum) {
+                            errors.push("Bitte geben Sie das Kündigungsdatum ein.");
+                            if (errors.length === 1) $("#kuendigungsdatum").focus();
+                        }
+                        if (!beendigungsdatum) {
+                            errors.push("Bitte geben Sie das Beendigungsdatum ein.");
+                            if (errors.length === 1) $("#beendigungsdatum").focus();
+                        }
+                        if (!kuendigungsgrund) {
+                            errors.push("Bitte geben Sie den Grund der Kündigung ein.");
+                            if (errors.length === 1) $("#kuendigungsgrund").focus();
+                        }
+                        if (!employer_name) {
+                            errors.push("Bitte geben Sie den Aussteller (Firma/Kunde) ein.");
+                            if (errors.length === 1) $("#employer_name").focus();
+                        }
+                        if (!employer_email) {
+                            errors.push("Bitte geben Sie die Aussteller E-Mail ein.");
+                            if (errors.length === 1) $("#employer_email").focus();
+                        } else if (!isValidEmail(employer_email)) {
+                            errors.push("Bitte geben Sie eine gültige E-Mail-Adresse für den Aussteller ein.");
+                            if (errors.length === 1) $("#employer_email").focus();
+                        }
+                        
+                        if (errors.length > 0) {
+                            alert("Bitte korrigieren Sie folgende Fehler:\n\n" + errors.join("\n"));
+                            return false;
+                        }
                         
                         var formData = $(this).serialize();
                         var submitBtn = $(this).find("button[type=submit]");
@@ -369,7 +420,12 @@ class RT_Kuendigung_Handler_V2 {
                             if (sendToEmployee && !employeeEmail) {
                                 alert("Bitte geben Sie die Mitarbeiter-E-Mail-Adresse ein, wenn Sie an den Mitarbeiter senden möchten.");
                                 $("#kuendigung-employee-email").focus();
-                                return;
+                                return false;
+                            }
+                            if (sendToEmployee && !isValidEmail(employeeEmail)) {
+                                alert("Bitte geben Sie eine gültige Mitarbeiter-E-Mail-Adresse ein.");
+                                $("#kuendigung-employee-email").focus();
+                                return false;
                             }
                         }
                         
@@ -400,6 +456,8 @@ class RT_Kuendigung_Handler_V2 {
                                 submitBtn.prop("disabled", false).text(originalText);
                             }
                         });
+                        
+                        return false;
                     });
                     
                     // Email sending
