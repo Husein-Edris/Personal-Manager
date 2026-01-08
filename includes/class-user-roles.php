@@ -151,50 +151,50 @@ class RT_User_Roles_V2 {
         $employee_count = $this->get_employee_count($user->ID);
         
         ?>
-        <div class="wrap">
-            <h1><?php _e('Mitarbeiter Dashboard', 'rt-employee-manager-v2'); ?></h1>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin: 20px 0;">
-                <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
-                    <h3 style="margin-top: 0;"><?php _e('Mitarbeiter Gesamt', 'rt-employee-manager-v2'); ?></h3>
-                    <p style="font-size: 24px; font-weight: bold; color: #0073aa; margin: 0;">
-                        <?php echo esc_html($employee_count['total']); ?>
-                    </p>
-                </div>
-                
-                <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
-                    <h3 style="margin-top: 0;"><?php _e('Beschäftigt', 'rt-employee-manager-v2'); ?></h3>
-                    <p style="font-size: 24px; font-weight: bold; color: #46b450; margin: 0;">
-                        <?php echo esc_html($employee_count['active']); ?>
-                    </p>
-                </div>
-                
-                <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
-                    <h3 style="margin-top: 0;"><?php _e('Inaktiv', 'rt-employee-manager-v2'); ?></h3>
-                    <p style="font-size: 24px; font-weight: bold; color: #dc3232; margin: 0;">
-                        <?php echo esc_html($employee_count['inactive']); ?>
-                    </p>
-                </div>
-            </div>
-            
-            <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px; margin: 20px 0;">
-                <h3><?php _e('Schnellaktionen', 'rt-employee-manager-v2'); ?></h3>
-                <p>
-                    <a href="<?php echo admin_url('post-new.php?post_type=angestellte_v2'); ?>" class="button button-primary">
-                        <?php _e('Neuen Mitarbeiter hinzufügen', 'rt-employee-manager-v2'); ?>
-                    </a>
-                    <a href="<?php echo admin_url('edit.php?post_type=angestellte_v2'); ?>" class="button">
-                        <?php _e('Alle Mitarbeiter anzeigen', 'rt-employee-manager-v2'); ?>
-                    </a>
-                </p>
-            </div>
-            
-            <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
-                <h3><?php _e('Neueste Mitarbeiter', 'rt-employee-manager-v2'); ?></h3>
-                <?php $this->display_recent_employees($user->ID); ?>
-            </div>
+<div class="wrap">
+    <h1><?php _e('Mitarbeiter Dashboard', 'rt-employee-manager-v2'); ?></h1>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin: 20px 0;">
+        <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
+            <h3 style="margin-top: 0;"><?php _e('Mitarbeiter Gesamt', 'rt-employee-manager-v2'); ?></h3>
+            <p style="font-size: 24px; font-weight: bold; color: #0073aa; margin: 0;">
+                <?php echo esc_html($employee_count['total']); ?>
+            </p>
         </div>
-        <?php
+
+        <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
+            <h3 style="margin-top: 0;"><?php _e('Beschäftigt', 'rt-employee-manager-v2'); ?></h3>
+            <p style="font-size: 24px; font-weight: bold; color: #46b450; margin: 0;">
+                <?php echo esc_html($employee_count['active']); ?>
+            </p>
+        </div>
+
+        <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
+            <h3 style="margin-top: 0;"><?php _e('Inaktiv', 'rt-employee-manager-v2'); ?></h3>
+            <p style="font-size: 24px; font-weight: bold; color: #dc3232; margin: 0;">
+                <?php echo esc_html($employee_count['inactive']); ?>
+            </p>
+        </div>
+    </div>
+
+    <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px; margin: 20px 0;">
+        <h3><?php _e('Schnellaktionen', 'rt-employee-manager-v2'); ?></h3>
+        <p>
+            <a href="<?php echo admin_url('post-new.php?post_type=angestellte_v2'); ?>" class="button button-primary">
+                <?php _e('Neuen Mitarbeiter hinzufügen', 'rt-employee-manager-v2'); ?>
+            </a>
+            <a href="<?php echo admin_url('edit.php?post_type=angestellte_v2'); ?>" class="button">
+                <?php _e('Alle Mitarbeiter anzeigen', 'rt-employee-manager-v2'); ?>
+            </a>
+        </p>
+    </div>
+
+    <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px;">
+        <h3><?php _e('Neueste Mitarbeiter', 'rt-employee-manager-v2'); ?></h3>
+        <?php $this->display_recent_employees($user->ID); ?>
+    </div>
+</div>
+<?php
     }
     
     
