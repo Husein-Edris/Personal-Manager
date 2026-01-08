@@ -4,7 +4,7 @@
  * Plugin Name: RT Employee Manager V2
  * Plugin URI: https://edrishusein.com
  * Description: Simplified employee management system for Austrian accounting firms with minimal dependencies
- * Version: 2.2.0
+ * Version: 2.2.1
  * Author: Edris Husein
  * Text Domain: rt-employee-manager-v2
  */
