@@ -22,4 +22,21 @@ Thumbs.db
 # Logs
 *.log
 error_log
+
+# Documentation files (personal development notes)
 CLAUDE.md
+# constitution.md - Uncomment if you don't want this on GitHub (it's useful project documentation)
+
+# Spec-Driven Development (SDD/Speckit) - Personal workflow, not needed on GitHub
+.specify/
+specs/
+
+# Backup files (should not be in repository)
+*backup*.php
+*.backup
+*.bak
+*-backup.*
+*~backup*
+
+# Composer lock (optional dependency management - already ignored above)
+# composer.lock
