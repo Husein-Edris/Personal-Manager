@@ -521,23 +521,30 @@ class RT_Kuendigung_Handler_V2 {
                         data += "&email_address=" + encodeURIComponent(emailAddress);
                         data += "&send_to_bookkeeping=" + (sendToBookkeeping ? "1" : "");
                         
+                        console.log("RT Employee Manager V2: Sending AJAX request with data:", data);
+                        
                         $.ajax({
                             url: rtKuendigungV2.ajaxurl,
                             type: "POST",
                             data: data,
                             success: function(response) {
+                                console.log("RT Employee Manager V2: AJAX response:", response);
                                 if (response.success) {
                                     // Close modal
                                     $("#kuendigung-modal").hide();
                                     alert("✓ " + response.data.message);
-                                    location.reload();
+                                    // Force reload after a short delay to ensure server has processed
+                                    setTimeout(function() {
+                                        location.reload(true);
+                                    }, 500);
                                 } else {
-                                    alert("Fehler: " + response.data);
+                                    alert("Fehler: " + (response.data || "Unbekannter Fehler"));
                                     submitBtn.prop("disabled", false).text(originalText);
                                 }
                             },
-                            error: function() {
-                                alert("Fehler beim Erstellen der Kündigung");
+                            error: function(xhr, status, error) {
+                                console.error("RT Employee Manager V2: AJAX error:", status, error, xhr.responseText);
+                                alert("Fehler beim Erstellen der Kündigung: " + error);
                                 submitBtn.prop("disabled", false).text(originalText);
                             }
                         });
@@ -707,16 +714,54 @@ class RT_Kuendigung_Handler_V2 {
             update_post_meta($kuendigung_id, $key, $value);
         }
         
-        // Update employee status to terminated (Ausgeschieden)
-        update_post_meta($employee_id, 'status', 'terminated');
-        
         // Get email address and options
         $email_address = sanitize_email($_POST['email_address'] ?? '');
         $send_to_bookkeeping = !empty($_POST['send_to_bookkeeping']);
         
+        // Log for debugging
+        error_log('RT Employee Manager V2: Creating Kündigung - email_address: ' . $email_address . ', send_to_bookkeeping: ' . ($send_to_bookkeeping ? 'yes' : 'no'));
+        error_log('RT Employee Manager V2: POST data: ' . print_r($_POST, true));
+        
         // Validate email address
         if (empty($email_address)) {
             wp_send_json_error(__('Bitte geben Sie eine E-Mail-Adresse ein.', 'rt-employee-manager-v2'));
+        }
+        
+        // Update employee status to terminated (Ausgeschieden)
+        $old_status = get_post_meta($employee_id, 'status', true);
+        error_log('RT Employee Manager V2: Updating status - Old: ' . $old_status . ', New: terminated, Employee ID: ' . $employee_id);
+        
+        // Update status using update_post_meta (will add if doesn't exist, update if exists)
+        $status_updated = update_post_meta($employee_id, 'status', 'terminated');
+        
+        // Verify status was updated
+        $current_status = get_post_meta($employee_id, 'status', true);
+        error_log('RT Employee Manager V2: Status after update_post_meta: ' . $current_status . ' (update_post_meta returned: ' . var_export($status_updated, true) . ')');
+        
+        // Force clear WordPress object cache
+        wp_cache_delete($employee_id, 'post_meta');
+        if (function_exists('clean_post_cache')) {
+            clean_post_cache($employee_id);
+        }
+        
+        // Double-check status
+        $final_status = get_post_meta($employee_id, 'status', true);
+        if ($final_status !== 'terminated') {
+            error_log('RT Employee Manager V2: WARNING - Status verification failed! Expected: terminated, Got: ' . $final_status);
+            // Try direct database update as fallback
+            global $wpdb;
+            $result = $wpdb->update(
+                $wpdb->postmeta,
+                array('meta_value' => 'terminated'),
+                array('post_id' => $employee_id, 'meta_key' => 'status'),
+                array('%s'),
+                array('%d', '%s')
+            );
+            error_log('RT Employee Manager V2: Direct DB update result: ' . var_export($result, true));
+            $final_status = get_post_meta($employee_id, 'status', true);
+            error_log('RT Employee Manager V2: Status after direct DB update: ' . $final_status);
+        } else {
+            error_log('RT Employee Manager V2: Status successfully updated to: terminated');
         }
         
         $message = __('Kündigung erstellt.', 'rt-employee-manager-v2');
@@ -724,6 +769,8 @@ class RT_Kuendigung_Handler_V2 {
         // Generate PDF and send email
         $pdf_generator = new RT_Kuendigung_PDF_Generator_V2();
         $result = $pdf_generator->send_kuendigung_email_manual($kuendigung_id, $employee_id, $email_address, true, $send_to_bookkeeping);
+        
+        error_log('RT Employee Manager V2: Email sending result: ' . print_r($result, true));
         
         if ($result['success']) {
             $message .= ' ' . __('PDF erfolgreich per E-Mail versendet. Beschäftigungsstatus wurde auf "Ausgeschieden" geändert.', 'rt-employee-manager-v2');
