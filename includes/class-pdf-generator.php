@@ -211,16 +211,18 @@ class RT_PDF_Generator_V2 {
         $subject_template = get_option('rt_employee_v2_email_subject_template', 'Mitarbeiterdaten: {FIRSTNAME} {LASTNAME} - {KUNDE}');
         $body_template = get_option('rt_employee_v2_email_body_template', '');
 
-        // Use template subject with placeholders
+        // Use template subject with placeholders (always use template if set)
         $final_subject = $this->replace_email_placeholders($subject_template, $employee_id);
         if (empty($final_subject)) {
             $final_subject = sprintf(__('Mitarbeiterdaten: %s', 'rt-employee-manager-v2'), $employee->post_title);
         }
 
-        // Use template body or default
+        // Use template body if provided, otherwise use default
         if (!empty($body_template)) {
+            // Template is provided - use it (overrides default)
             $message = $this->replace_email_placeholders($body_template, $employee_id);
         } else {
+            // No template - use default message
             $message = sprintf(
                 __("Sehr geehrte Damen und Herren,\n\nanbei finden Sie die Mitarbeiterdaten für %s.\n\nUnternehmen: %s\nE-Mail: %s\nArt der Beschäftigung: %s\n\nMit freundlichen Grüßen\nIhr Team", 'rt-employee-manager-v2'),
                 $employee->post_title,
@@ -251,7 +253,20 @@ class RT_PDF_Generator_V2 {
             }
         }
 
+        // Build email headers
         $headers = array('Content-Type: text/plain; charset=UTF-8');
+        
+        // Get sender name and email from settings
+        $sender_name = get_option('rt_employee_v2_email_sender_name', '');
+        $sender_email = get_option('rt_employee_v2_email_sender_email', '');
+        
+        // Set From header if sender info is configured
+        if (!empty($sender_name) && !empty($sender_email)) {
+            $headers[] = 'From: ' . $sender_name . ' <' . $sender_email . '>';
+        } elseif (!empty($sender_email)) {
+            $headers[] = 'From: ' . $sender_email;
+        }
+        
         $attachments = array();
 
         if (file_exists($pdf_path)) {
@@ -268,6 +283,7 @@ class RT_PDF_Generator_V2 {
 
     /**
      * Replace placeholders in email templates
+     * Returns all available placeholders for documentation
      */
     private function replace_email_placeholders($template, $employee_id) {
         $employee_data = $this->get_all_employee_data($employee_id);
@@ -277,18 +293,81 @@ class RT_PDF_Generator_V2 {
         $company_name = isset($employee_data['employer_name']) ? $employee_data['employer_name'] : '';
         $current_user = wp_get_current_user();
         $sender_name = $current_user->display_name;
+        
+        // Get sender name from settings if available
+        $sender_name_setting = get_option('rt_employee_v2_email_sender_name', '');
+        if (!empty($sender_name_setting)) {
+            $sender_name = $sender_name_setting;
+        }
 
         $replacements = array(
+            // Employee personal info
             '{FIRSTNAME}' => esc_html($firstname),
             '{LASTNAME}' => esc_html($lastname),
             '{EMPLOYEE_NAME}' => esc_html(trim($firstname . ' ' . $lastname)),
+            '{EMPLOYEE_EMAIL}' => esc_html(isset($employee_data['email']) ? $employee_data['email'] : ''),
+            '{SVNR}' => esc_html(isset($employee_data['sozialversicherungsnummer']) ? $employee_data['sozialversicherungsnummer'] : ''),
+            '{GEBURTSDATUM}' => esc_html(isset($employee_data['geburtsdatum']) ? $employee_data['geburtsdatum'] : ''),
+            
+            // Company/Employer info
             '{KUNDE}' => esc_html($company_name),
             '{COMPANY_NAME}' => esc_html($company_name),
+            '{EMPLOYER_NAME}' => esc_html($company_name),
+            
+            // Employment info
+            '{BESCHAEFTIGUNG}' => esc_html(isset($employee_data['art_des_dienstverhaltnisses']) ? $employee_data['art_des_dienstverhaltnisses'] : ''),
+            '{ART_DER_BESCHAEFTIGUNG}' => esc_html(isset($employee_data['art_des_dienstverhaltnisses']) ? $employee_data['art_des_dienstverhaltnisses'] : ''),
+            '{TATIGKEIT}' => esc_html(isset($employee_data['bezeichnung_der_tatigkeit']) ? $employee_data['bezeichnung_der_tatigkeit'] : ''),
+            '{EINTRITTSDATUM}' => esc_html(isset($employee_data['eintrittsdatum']) ? $employee_data['eintrittsdatum'] : ''),
+            '{STATUS}' => esc_html(isset($employee_data['status']) ? $employee_data['status'] : ''),
+            
+            // Sender info
             '{SENDER_NAME}' => esc_html($sender_name),
+            
+            // Date
             '{DATE}' => esc_html(date_i18n('d.m.Y')),
+            '{TIME}' => esc_html(date_i18n('H:i')),
+            '{DATETIME}' => esc_html(date_i18n('d.m.Y H:i')),
         );
 
         return str_replace(array_keys($replacements), array_values($replacements), $template);
+    }
+    
+    /**
+     * Get list of all available email placeholders for documentation
+     * Public method so it can be called from admin dashboard
+     */
+    public function get_email_placeholders_list() {
+        return array(
+            'Employee Personal Info' => array(
+                '{FIRSTNAME}' => 'Employee first name (Vorname)',
+                '{LASTNAME}' => 'Employee last name (Nachname)',
+                '{EMPLOYEE_NAME}' => 'Full employee name (Vorname Nachname)',
+                '{EMPLOYEE_EMAIL}' => 'Employee email address',
+                '{SVNR}' => 'Social security number (Sozialversicherungsnummer)',
+                '{GEBURTSDATUM}' => 'Date of birth (Geburtsdatum)',
+            ),
+            'Company/Employer Info' => array(
+                '{KUNDE}' => 'Customer/Company name',
+                '{COMPANY_NAME}' => 'Company name (same as {KUNDE})',
+                '{EMPLOYER_NAME}' => 'Employer name (same as {KUNDE})',
+            ),
+            'Employment Info' => array(
+                '{BESCHAEFTIGUNG}' => 'Type of employment (Art des Dienstverhältnisses)',
+                '{ART_DER_BESCHAEFTIGUNG}' => 'Type of employment (full name)',
+                '{TATIGKEIT}' => 'Job title/Activity (Bezeichnung der Tätigkeit)',
+                '{EINTRITTSDATUM}' => 'Start date (Eintrittsdatum)',
+                '{STATUS}' => 'Employment status',
+            ),
+            'Sender Info' => array(
+                '{SENDER_NAME}' => 'Name of person sending the email (from settings or current user)',
+            ),
+            'Date/Time' => array(
+                '{DATE}' => 'Current date (d.m.Y format)',
+                '{TIME}' => 'Current time (H:i format)',
+                '{DATETIME}' => 'Current date and time (d.m.Y H:i format)',
+            ),
+        );
     }
     
     /**
