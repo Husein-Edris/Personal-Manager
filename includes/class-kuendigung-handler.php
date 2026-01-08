@@ -262,6 +262,50 @@ class RT_Kuendigung_Handler_V2 {
                             </tr>
                         </table>
                         
+                        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
+                            <h3 style="margin-top: 0;"><?php _e('PDF per E-Mail versenden', 'rt-employee-manager-v2'); ?></h3>
+                            
+                            <?php
+                            $employee_data = $this->get_employee_data($post->ID);
+                            $employee_email = $employee_data['email'] ?? '';
+                            ?>
+                            
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px;">
+                                    <input type="email" id="kuendigung-employee-email" 
+                                        placeholder="<?php _e('Mitarbeiter E-Mail-Adresse', 'rt-employee-manager-v2'); ?>" 
+                                        value="<?php echo esc_attr($employee_email); ?>"
+                                        class="regular-text" style="width: 100%;" />
+                                </label>
+                            </div>
+                            
+                            <div class="email-options" style="margin-bottom: 15px;">
+                                <p><label style="display: block; margin-bottom: 5px;">
+                                    <input type="checkbox" id="send-to-employee-on-create" />
+                                    <?php _e('An Mitarbeiter senden', 'rt-employee-manager-v2'); ?>
+                                    <?php if ($employee_email): ?>
+                                        <strong>(<?php echo esc_html($employee_email); ?>)</strong>
+                                    <?php endif; ?>
+                                </label></p>
+                                
+                                <?php 
+                                $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', '');
+                                if (!empty($buchhaltung_email)): 
+                                ?>
+                                <p><label style="display: block;">
+                                    <input type="checkbox" id="send-to-bookkeeping-on-create" />
+                                    <?php _e('An Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                                    <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
+                                </label></p>
+                                <?php else: ?>
+                                <p style="color: #666; font-style: italic; font-size: 12px;">
+                                    <?php _e('Buchhaltung E-Mail nicht konfiguriert.', 'rt-employee-manager-v2'); ?>
+                                    <a href="<?php echo admin_url('admin.php?page=rt-employee-manager-v2-settings'); ?>"><?php _e('Jetzt einrichten', 'rt-employee-manager-v2'); ?></a>
+                                </p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        
                         <p class="submit">
                             <button type="submit" class="button button-primary"><?php _e('Kündigung erstellen und PDF versenden', 'rt-employee-manager-v2'); ?></button>
                             <button type="button" class="button kuendigung-modal-close"><?php _e('Abbrechen', 'rt-employee-manager-v2'); ?></button>
@@ -315,12 +359,32 @@ class RT_Kuendigung_Handler_V2 {
                         var submitBtn = $(this).find("button[type=submit]");
                         var originalText = submitBtn.text();
                         
+                        // Get email options
+                        var employeeEmail = $("#kuendigung-employee-email").val().trim();
+                        var sendToEmployee = $("#send-to-employee-on-create").is(":checked");
+                        var sendToBookkeeping = $("#send-to-bookkeeping-on-create").is(":checked");
+                        
+                        // Validation if sending emails
+                        if (sendToEmployee || sendToBookkeeping) {
+                            if (sendToEmployee && !employeeEmail) {
+                                alert("Bitte geben Sie die Mitarbeiter-E-Mail-Adresse ein, wenn Sie an den Mitarbeiter senden möchten.");
+                                $("#kuendigung-employee-email").focus();
+                                return;
+                            }
+                        }
+                        
                         submitBtn.prop("disabled", true).text("Erstelle Kündigung...");
+                        
+                        // Add email options to form data
+                        var data = formData + "&action=create_kuendigung_v2";
+                        data += "&employee_email=" + encodeURIComponent(employeeEmail);
+                        data += "&send_to_employee=" + (sendToEmployee ? "1" : "");
+                        data += "&send_to_bookkeeping=" + (sendToBookkeeping ? "1" : "");
                         
                         $.ajax({
                             url: rtKuendigungV2.ajaxurl,
                             type: "POST",
-                            data: formData + "&action=create_kuendigung_v2",
+                            data: data,
                             success: function(response) {
                                 if (response.success) {
                                     alert("✓ " + response.data.message);
@@ -503,8 +567,35 @@ class RT_Kuendigung_Handler_V2 {
         // Update employee status to terminated
         update_post_meta($employee_id, 'status', 'terminated');
         
+        // Check if emails should be sent
+        $employee_email = sanitize_email($_POST['employee_email'] ?? '');
+        $send_to_employee = !empty($_POST['send_to_employee']);
+        $send_to_bookkeeping = !empty($_POST['send_to_bookkeeping']);
+        
+        $message = __('Kündigung erstellt.', 'rt-employee-manager-v2');
+        
+        // Send emails if requested
+        if ($send_to_employee || $send_to_bookkeeping) {
+            // Validate employee email if sending to employee
+            if ($send_to_employee && empty($employee_email)) {
+                wp_send_json_error(__('Bitte geben Sie die Mitarbeiter-E-Mail-Adresse ein, wenn Sie an den Mitarbeiter senden möchten.', 'rt-employee-manager-v2'));
+            }
+            
+            // Generate PDF and send email
+            $pdf_generator = new RT_Kuendigung_PDF_Generator_V2();
+            $result = $pdf_generator->send_kuendigung_email_manual($kuendigung_id, $employee_id, $employee_email, $send_to_employee, $send_to_bookkeeping);
+            
+            if ($result['success']) {
+                $message .= ' ' . __('PDF erfolgreich per E-Mail versendet.', 'rt-employee-manager-v2');
+            } else {
+                $message .= ' ' . __('Kündigung erstellt, aber E-Mail-Versand fehlgeschlagen: ', 'rt-employee-manager-v2') . ($result['error'] ?? __('Unbekannter Fehler', 'rt-employee-manager-v2'));
+            }
+        } else {
+            $message .= ' ' . __('Sie können das PDF jetzt per E-Mail versenden.', 'rt-employee-manager-v2');
+        }
+        
         wp_send_json_success(array(
-            'message' => __('Kündigung erstellt. Sie können das PDF jetzt per E-Mail versenden.', 'rt-employee-manager-v2'),
+            'message' => $message,
             'kuendigung_id' => $kuendigung_id
         ));
     }
