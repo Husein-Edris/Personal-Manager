@@ -457,8 +457,11 @@ class RT_PDF_Generator_V2 {
             
             // Configure DomPDF options for better image handling
             $options = $dompdf->getOptions();
-            $options->set('isRemoteEnabled', true); // Allow remote resources if needed
+            $options->set('isRemoteEnabled', true); // Allow remote/local URLs
             $options->set('isHtml5ParserEnabled', true); // Enable HTML5 parser
+            $options->set('isPhpEnabled', false); // Security: disable PHP execution
+            $options->set('isFontSubsettingEnabled', true); // Enable font subsetting
+            $options->set('defaultFont', 'DejaVu Sans'); // Use default font
             
             $dompdf->setOptions($options);
             $dompdf->loadHtml($html);
@@ -796,35 +799,80 @@ class RT_PDF_Generator_V2 {
             $working_days_list = implode(', ', $days);
         }
         
-        // Get logo URL if set - convert to data URI for DomPDF (most reliable method)
+        // Get logo - always use data URI for maximum compatibility with DomPDF
         $logo_id = get_option('rt_employee_v2_pdf_logo', 0);
-        $logo_data_uri = '';
+        $logo_src = '';
         if ($logo_id) {
-            // Get the attachment file path
             $logo_path = get_attached_file($logo_id);
-            if ($logo_path && file_exists($logo_path)) {
-                // Get MIME type
-                $mime_type = get_post_mime_type($logo_id);
-                if (empty($mime_type)) {
-                    // Fallback: detect from file extension
-                    $file_ext = strtolower(pathinfo($logo_path, PATHINFO_EXTENSION));
-                    $mime_types = array(
-                        'jpg' => 'image/jpeg',
-                        'jpeg' => 'image/jpeg',
-                        'png' => 'image/png',
-                        'gif' => 'image/gif',
-                        'webp' => 'image/webp',
-                        'svg' => 'image/svg+xml'
-                    );
-                    $mime_type = isset($mime_types[$file_ext]) ? $mime_types[$file_ext] : 'image/jpeg';
-                }
-                
-                // Convert image to base64 data URI (most reliable for DomPDF)
-                $image_data = file_get_contents($logo_path);
-                if ($image_data !== false) {
-                    $logo_data_uri = 'data:' . $mime_type . ';base64,' . base64_encode($image_data);
-                }
+            $logo_url = wp_get_attachment_image_url($logo_id, 'full');
+            
+            // Get MIME type - critical for data URI to work
+            $mime_type = get_post_mime_type($logo_id);
+            if (empty($mime_type) && $logo_path) {
+                $ext = strtolower(pathinfo($logo_path, PATHINFO_EXTENSION));
+                $mime_map = array(
+                    'jpg' => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                    'png' => 'image/png',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    'svg' => 'image/svg+xml'
+                );
+                $mime_type = isset($mime_map[$ext]) ? $mime_map[$ext] : 'image/jpeg';
             }
+            
+            // Ensure we have a valid MIME type before proceeding
+            if (empty($mime_type)) {
+                error_log('RT Employee Manager V2: Could not determine MIME type for logo ID: ' . $logo_id);
+            }
+            
+            // Read image file and create data URI - most reliable method for DomPDF
+            if ($logo_path && file_exists($logo_path) && !empty($mime_type)) {
+                $image_data = @file_get_contents($logo_path);
+                if ($image_data !== false && !empty($image_data)) {
+                    // Validate that we have actual image data
+                    // Check file signature for common formats
+                    $valid_signature = false;
+                    if (strpos($mime_type, 'jpeg') !== false) {
+                        $valid_signature = (substr($image_data, 0, 3) === "\xFF\xD8\xFF");
+                    } elseif (strpos($mime_type, 'png') !== false) {
+                        $valid_signature = (substr($image_data, 0, 8) === "\x89PNG\r\n\x1a\n");
+                    } elseif (strpos($mime_type, 'gif') !== false) {
+                        $valid_signature = (substr($image_data, 0, 6) === "GIF87a" || substr($image_data, 0, 6) === "GIF89a");
+                    } elseif (strpos($mime_type, 'svg') !== false) {
+                        // SVG starts with <?xml or <svg
+                        $valid_signature = (stripos(substr($image_data, 0, 100), '<svg') !== false || stripos(substr($image_data, 0, 100), '<?xml') !== false);
+                    } else {
+                        // For other formats, trust the MIME type
+                        $valid_signature = true;
+                    }
+                    
+                    if ($valid_signature) {
+                        // Create data URI - most reliable method for DomPDF
+                        $base64 = base64_encode($image_data);
+                        if (!empty($base64)) {
+                            $logo_src = 'data:' . trim($mime_type) . ';base64,' . $base64;
+                            error_log('RT Employee Manager V2: Created data URI for logo. MIME: ' . $mime_type . ', Size: ' . strlen($image_data) . ' bytes');
+                        } else {
+                            error_log('RT Employee Manager V2: Failed to base64 encode logo image');
+                        }
+                    } else {
+                        error_log('RT Employee Manager V2: Logo file signature does not match MIME type: ' . $mime_type);
+                    }
+                } else {
+                    error_log('RT Employee Manager V2: Failed to read logo file at: ' . ($logo_path ?: 'N/A'));
+                }
+            } else {
+                error_log('RT Employee Manager V2: Logo file not accessible. Path: ' . ($logo_path ?: 'N/A') . ', Exists: ' . ($logo_path && file_exists($logo_path) ? 'yes' : 'no'));
+            }
+            
+            // Fallback to absolute URL if data URI failed or file not found
+            if (empty($logo_src) && $logo_url) {
+                $logo_src = (strpos($logo_url, 'http') === 0) ? $logo_url : site_url($logo_url);
+                error_log('RT Employee Manager V2: Using absolute URL fallback: ' . $logo_src);
+            }
+        } else {
+            error_log('RT Employee Manager V2: No logo ID set in options');
         }
         
         // Get header and footer text from settings
@@ -868,7 +916,7 @@ class RT_PDF_Generator_V2 {
 </head>
 <body>
     <div class=\"pdf-header\">
-        <div class=\"pdf-header-left\">" . ($logo_data_uri ? '<img src="' . esc_attr($logo_data_uri) . '" alt="Logo" class="pdf-logo" />' : '') . "</div>
+        <div class=\"pdf-header-left\">" . (!empty($logo_src) ? '<img src="' . htmlspecialchars($logo_src, ENT_QUOTES | ENT_XML1, 'UTF-8') . '" alt="Logo" class="pdf-logo" style="max-height: 120px; max-width: 200px; height: auto; width: auto;" />' : '<!-- No logo set -->') . "</div>
         <div class=\"pdf-header-right\">
             <div class=\"pdf-header-text\">" . nl2br(esc_html($pdf_header_text)) . "</div>
         </div>
