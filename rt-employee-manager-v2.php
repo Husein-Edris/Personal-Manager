@@ -67,9 +67,11 @@ class RT_Employee_Manager_V2
         new RT_Employee_Post_Type_V2();
         new RT_Employee_Meta_Boxes_V2();
         new RT_User_Roles_V2();
+        new RT_Kuendigung_Post_Type_V2();
 
         if (is_admin()) {
             new RT_Admin_Dashboard_V2();
+            new RT_Kuendigung_Handler_V2();
         }
 
         // PDF stuff
@@ -89,7 +91,10 @@ class RT_Employee_Manager_V2
             'class-employee-meta-boxes.php',
             'class-user-roles.php',
             'class-admin-dashboard.php',
-            'class-pdf-generator.php'
+            'class-pdf-generator.php',
+            'class-kuendigung-post-type.php',
+            'class-kuendigung-handler.php',
+            'class-kuendigung-pdf-generator.php'
         );
 
         foreach ($classes as $class) {
@@ -127,8 +132,10 @@ class RT_Employee_Manager_V2
     {
         // Need to load this manually during activation
         require_once RT_EMPLOYEE_V2_PLUGIN_DIR . 'includes/class-employee-post-type.php';
-        $post_type_handler = new RT_Employee_Post_Type_V2();
-        // The capabilities get registered when this class initializes
+        require_once RT_EMPLOYEE_V2_PLUGIN_DIR . 'includes/class-kuendigung-post-type.php';
+        $employee_post_type = new RT_Employee_Post_Type_V2();
+        $kuendigung_post_type = new RT_Kuendigung_Post_Type_V2();
+        // The capabilities get registered when these classes initialize
     }
 
     /**
