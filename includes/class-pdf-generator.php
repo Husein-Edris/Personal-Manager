@@ -237,13 +237,35 @@ class RT_PDF_Generator_V2 {
 
         // Convert URL to file path for attachment
         $upload_dir = wp_upload_dir();
+        
+        // Handle different URL formats (with or without domain)
         $pdf_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $pdf_url);
+        
+        // If the URL contains the full site URL, replace that too
+        $pdf_path = str_replace(site_url('/wp-content/uploads/'), $upload_dir['basedir'] . '/', $pdf_path);
+        
+        // Additional check: if URL contains http/https, extract just the path
+        if (strpos($pdf_url, 'http') === 0) {
+            $parsed_url = parse_url($pdf_url);
+            if (isset($parsed_url['path'])) {
+                // Remove /wp-content/uploads from path and use basedir
+                $path_parts = explode('/wp-content/uploads/', $parsed_url['path']);
+                if (isset($path_parts[1])) {
+                    $pdf_path = $upload_dir['basedir'] . '/' . $path_parts[1];
+                }
+            }
+        }
 
         $headers = array('Content-Type: text/plain; charset=UTF-8');
         $attachments = array();
 
         if (file_exists($pdf_path)) {
             $attachments[] = $pdf_path;
+        } else {
+            error_log('RT Employee Manager V2: PDF file not found for attachment: ' . $pdf_path);
+            error_log('RT Employee Manager V2: Original PDF URL: ' . $pdf_url);
+            error_log('RT Employee Manager V2: Upload basedir: ' . $upload_dir['basedir']);
+            error_log('RT Employee Manager V2: Upload baseurl: ' . $upload_dir['baseurl']);
         }
 
         return wp_mail($to_email, $final_subject, $message, $headers, $attachments);
@@ -275,9 +297,66 @@ class RT_PDF_Generator_V2 {
     }
     
     /**
-     * Generate simple PDF
+     * Generate simple PDF using DomPDF
      */
     private function generate_simple_pdf($employee_id) {
+        $employee = get_post($employee_id);
+        if (!$employee || $employee->post_type !== 'angestellte_v2') {
+            return false;
+        }
+        
+        // Check if DomPDF is available
+        if (!class_exists('\Dompdf\Dompdf')) {
+            error_log('RT Employee Manager V2: DomPDF not found. Please run composer install.');
+            // Fallback to manual PDF creation
+            return $this->generate_manual_pdf($employee_id);
+        }
+        
+        // Create upload directory
+        $upload_dir = wp_upload_dir();
+        $pdf_dir = $upload_dir['basedir'] . '/employee-pdfs/';
+        if (!file_exists($pdf_dir)) {
+            wp_mkdir_p($pdf_dir);
+        }
+        
+        // Generate PDF filename
+        $timestamp = time();
+        $filename = "employee-{$employee_id}-{$timestamp}.pdf";
+        $file_path = $pdf_dir . $filename;
+        
+        // Get complete employee data
+        $data = $this->get_all_employee_data($employee_id);
+        
+        // Create complete HTML
+        $html = $this->create_complete_html($employee, $data);
+        
+        try {
+            // Use DomPDF to convert HTML to PDF
+            $dompdf = new \Dompdf\Dompdf();
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+            
+            // Save PDF to file
+            $pdf_output = $dompdf->output();
+            if (file_put_contents($file_path, $pdf_output)) {
+                update_post_meta($employee_id, '_latest_pdf_path', $file_path);
+                update_post_meta($employee_id, '_latest_pdf_url', $upload_dir['baseurl'] . '/employee-pdfs/' . $filename);
+                return $upload_dir['baseurl'] . '/employee-pdfs/' . $filename;
+            }
+        } catch (Exception $e) {
+            error_log('RT Employee Manager V2: PDF generation error: ' . $e->getMessage());
+            // Fallback to manual PDF creation
+            return $this->generate_manual_pdf($employee_id);
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Generate PDF manually (fallback when DomPDF is not available)
+     */
+    private function generate_manual_pdf($employee_id) {
         $employee = get_post($employee_id);
         if (!$employee || $employee->post_type !== 'angestellte_v2') {
             return false;
@@ -290,19 +369,20 @@ class RT_PDF_Generator_V2 {
             wp_mkdir_p($pdf_dir);
         }
         
-        // Generate simple filename
+        // Generate PDF filename
         $timestamp = time();
-        $filename = "employee-{$employee_id}-{$timestamp}.html";
+        $filename = "employee-{$employee_id}-{$timestamp}.pdf";
         $file_path = $pdf_dir . $filename;
         
         // Get complete employee data
         $data = $this->get_all_employee_data($employee_id);
         
-        // Create complete HTML
-        $html = $this->create_complete_html($employee, $data);
+        // Create actual PDF content
+        $pdf_content = $this->create_actual_pdf($employee, $data);
         
-        if (file_put_contents($file_path, $html)) {
+        if (file_put_contents($file_path, $pdf_content)) {
             update_post_meta($employee_id, '_latest_pdf_path', $file_path);
+            update_post_meta($employee_id, '_latest_pdf_url', $upload_dir['baseurl'] . '/employee-pdfs/' . $filename);
             return $upload_dir['baseurl'] . '/employee-pdfs/' . $filename;
         }
         

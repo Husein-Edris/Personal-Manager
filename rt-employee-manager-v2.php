@@ -48,6 +48,12 @@ class RT_Employee_Manager_V2
 
     public function init()
     {
+        // Load Composer autoloader for DomPDF
+        $vendor_autoload = RT_EMPLOYEE_V2_PLUGIN_DIR . 'vendor/autoload.php';
+        if (file_exists($vendor_autoload)) {
+            require_once $vendor_autoload;
+        }
+
         // PDFs can be memory hogs, bump the limit if we can
         if (function_exists('ini_get') && function_exists('ini_set')) {
             $current_limit = ini_get('memory_limit');
