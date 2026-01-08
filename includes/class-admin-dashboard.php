@@ -346,6 +346,8 @@ class RT_Admin_Dashboard_V2 {
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_company_address');
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_pdf_template_header');
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_pdf_template_footer');
+        register_setting('rt_employee_v2_settings', 'rt_employee_v2_email_subject_template');
+        register_setting('rt_employee_v2_settings', 'rt_employee_v2_email_body_template');
     }
     
     /**
@@ -357,13 +359,17 @@ class RT_Admin_Dashboard_V2 {
             update_option('rt_employee_v2_company_address', sanitize_textarea_field($_POST['company_address']));
             update_option('rt_employee_v2_pdf_template_header', sanitize_textarea_field($_POST['pdf_template_header']));
             update_option('rt_employee_v2_pdf_template_footer', sanitize_textarea_field($_POST['pdf_template_footer']));
+            update_option('rt_employee_v2_email_subject_template', sanitize_text_field($_POST['email_subject_template']));
+            update_option('rt_employee_v2_email_body_template', wp_kses_post($_POST['email_body_template']));
             echo '<div class="notice notice-success"><p>' . __('Einstellungen gespeichert!', 'rt-employee-manager-v2') . '</p></div>';
         }
-        
+
         $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', '');
         $company_address = get_option('rt_employee_v2_company_address', '');
         $pdf_header = get_option('rt_employee_v2_pdf_template_header', '');
         $pdf_footer = get_option('rt_employee_v2_pdf_template_footer', '');
+        $email_subject = get_option('rt_employee_v2_email_subject_template', 'Mitarbeiterdaten: {FIRSTNAME} {LASTNAME} - {KUNDE}');
+        $email_body = get_option('rt_employee_v2_email_body_template', '');
         ?>
         <div class="wrap">
             <h1><?php _e('RT Employee Manager V2 - Einstellungen', 'rt-employee-manager-v2'); ?></h1>
@@ -373,16 +379,47 @@ class RT_Admin_Dashboard_V2 {
                 
                 <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px;">
                     <h2><?php _e('E-Mail Konfiguration', 'rt-employee-manager-v2'); ?></h2>
-                    
+
                     <table class="form-table">
                         <tr>
                             <th scope="row">
                                 <label for="buchhaltung_email"><?php _e('Buchhaltung E-Mail-Adresse', 'rt-employee-manager-v2'); ?></label>
                             </th>
                             <td>
-                                <input type="email" id="buchhaltung_email" name="buchhaltung_email" 
+                                <input type="email" id="buchhaltung_email" name="buchhaltung_email"
                                        value="<?php echo esc_attr($buchhaltung_email); ?>" class="regular-text" />
                                 <p class="description"><?php _e('E-Mail-Adresse der Buchhaltung für PDF-Versand', 'rt-employee-manager-v2'); ?></p>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px;">
+                    <h2><?php _e('E-Mail Template', 'rt-employee-manager-v2'); ?></h2>
+                    <p class="description" style="margin-bottom: 15px;">
+                        <?php _e('Verfügbare Platzhalter:', 'rt-employee-manager-v2'); ?>
+                        <code>{FIRSTNAME}</code>, <code>{LASTNAME}</code>, <code>{EMPLOYEE_NAME}</code>,
+                        <code>{KUNDE}</code>, <code>{COMPANY_NAME}</code>, <code>{SENDER_NAME}</code>, <code>{DATE}</code>
+                    </p>
+
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="email_subject_template"><?php _e('E-Mail Betreff', 'rt-employee-manager-v2'); ?></label>
+                            </th>
+                            <td>
+                                <input type="text" id="email_subject_template" name="email_subject_template"
+                                       value="<?php echo esc_attr($email_subject); ?>" class="large-text" />
+                                <p class="description"><?php _e('Standard: Mitarbeiterdaten: {FIRSTNAME} {LASTNAME} - {KUNDE}', 'rt-employee-manager-v2'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="email_body_template"><?php _e('E-Mail Text', 'rt-employee-manager-v2'); ?></label>
+                            </th>
+                            <td>
+                                <textarea id="email_body_template" name="email_body_template" rows="8" class="large-text"><?php echo esc_textarea($email_body); ?></textarea>
+                                <p class="description"><?php _e('Leer lassen für Standard-Nachricht mit Mitarbeiterdaten.', 'rt-employee-manager-v2'); ?></p>
                             </td>
                         </tr>
                     </table>

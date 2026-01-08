@@ -207,32 +207,71 @@ class RT_PDF_Generator_V2 {
         if (!$employee) {
             return false;
         }
-        
+
         // Get employee data for email content
         $employee_data = $this->get_all_employee_data($employee_id);
         $company_name = isset($employee_data['employer_name']) ? $employee_data['employer_name'] : 'Unbekannt';
-        
-        // Create email message
-        $message = sprintf(
-            __("Sehr geehrte Damen und Herren,\n\nanbei finden Sie die Mitarbeiterdaten für %s.\n\nUnternehmen: %s\nE-Mail: %s\nArt der Beschäftigung: %s\n\nMit freundlichen Grüßen\nIhr Team", 'rt-employee-manager-v2'),
-            $employee->post_title,
-            $company_name,
-            isset($employee_data['email']) ? $employee_data['email'] : '',
-            isset($employee_data['art_des_dienstverhaltnisses']) ? $employee_data['art_des_dienstverhaltnisses'] : ''
-        );
-        
+
+        // Get template settings
+        $subject_template = get_option('rt_employee_v2_email_subject_template', 'Mitarbeiterdaten: {FIRSTNAME} {LASTNAME} - {KUNDE}');
+        $body_template = get_option('rt_employee_v2_email_body_template', '');
+
+        // Use template subject with placeholders
+        $final_subject = $this->replace_email_placeholders($subject_template, $employee_id);
+        if (empty($final_subject)) {
+            $final_subject = sprintf(__('Mitarbeiterdaten: %s', 'rt-employee-manager-v2'), $employee->post_title);
+        }
+
+        // Use template body or default
+        if (!empty($body_template)) {
+            $message = $this->replace_email_placeholders($body_template, $employee_id);
+        } else {
+            $message = sprintf(
+                __("Sehr geehrte Damen und Herren,\n\nanbei finden Sie die Mitarbeiterdaten für %s.\n\nUnternehmen: %s\nE-Mail: %s\nArt der Beschäftigung: %s\n\nMit freundlichen Grüßen\nIhr Team", 'rt-employee-manager-v2'),
+                $employee->post_title,
+                $company_name,
+                isset($employee_data['email']) ? $employee_data['email'] : '',
+                isset($employee_data['art_des_dienstverhaltnisses']) ? $employee_data['art_des_dienstverhaltnisses'] : ''
+            );
+        }
+
         // Convert URL to file path for attachment
         $upload_dir = wp_upload_dir();
         $pdf_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $pdf_url);
-        
+
         $headers = array('Content-Type: text/plain; charset=UTF-8');
         $attachments = array();
-        
+
         if (file_exists($pdf_path)) {
             $attachments[] = $pdf_path;
         }
-        
-        return wp_mail($to_email, $subject, $message, $headers, $attachments);
+
+        return wp_mail($to_email, $final_subject, $message, $headers, $attachments);
+    }
+
+    /**
+     * Replace placeholders in email templates
+     */
+    private function replace_email_placeholders($template, $employee_id) {
+        $employee_data = $this->get_all_employee_data($employee_id);
+
+        $firstname = isset($employee_data['vorname']) ? $employee_data['vorname'] : '';
+        $lastname = isset($employee_data['nachname']) ? $employee_data['nachname'] : '';
+        $company_name = isset($employee_data['employer_name']) ? $employee_data['employer_name'] : '';
+        $current_user = wp_get_current_user();
+        $sender_name = $current_user->display_name;
+
+        $replacements = array(
+            '{FIRSTNAME}' => esc_html($firstname),
+            '{LASTNAME}' => esc_html($lastname),
+            '{EMPLOYEE_NAME}' => esc_html(trim($firstname . ' ' . $lastname)),
+            '{KUNDE}' => esc_html($company_name),
+            '{COMPANY_NAME}' => esc_html($company_name),
+            '{SENDER_NAME}' => esc_html($sender_name),
+            '{DATE}' => esc_html(date_i18n('d.m.Y')),
+        );
+
+        return str_replace(array_keys($replacements), array_values($replacements), $template);
     }
     
     /**
