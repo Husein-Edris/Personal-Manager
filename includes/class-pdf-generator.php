@@ -788,6 +788,27 @@ class RT_PDF_Generator_V2 {
             $working_days_list = implode(', ', $days);
         }
         
+        // Get logo URL if set
+        $logo_id = get_option('rt_employee_v2_pdf_logo', 0);
+        $logo_url = '';
+        if ($logo_id) {
+            $logo_url = wp_get_attachment_image_url($logo_id, 'full');
+        }
+        
+        // Get header and footer text from settings
+        $pdf_header_text = get_option('rt_employee_v2_pdf_template_header', '');
+        $pdf_footer_text = get_option('rt_employee_v2_pdf_template_footer', '');
+        
+        // Default header text if not set
+        if (empty($pdf_header_text)) {
+            $pdf_header_text = 'Mitarbeiterverwaltung';
+        }
+        
+        // Default footer text if not set
+        if (empty($pdf_footer_text)) {
+            $pdf_footer_text = 'RT Employee Manager V2 - ' . get_bloginfo('name') . "\n" . home_url();
+        }
+        
         return "<!DOCTYPE html>
 <html>
 <head>
@@ -795,28 +816,36 @@ class RT_PDF_Generator_V2 {
     <title>Mitarbeiterdaten - {$title}</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; color: #333; }
-        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 30px; }
-        h1 { color: #0073aa; margin-bottom: 10px; font-size: 24px; }
-        h2 { color: #333; margin-bottom: 5px; font-size: 18px; }
+        .pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #333; }
+        .pdf-header-left { flex: 0 0 auto; }
+        .pdf-header-right { flex: 1; text-align: right; padding-top: 10px; }
+        .pdf-logo { max-height: 120px; max-width: 200px; width: auto; height: auto; object-fit: contain; }
+        .pdf-header-text { font-size: 16px; font-weight: bold; color: #333; white-space: pre-line; }
+        .employee-info-box { margin: 20px 0; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; }
+        .employee-info-box h1 { margin: 0 0 10px 0; color: #0073aa; font-size: 24px; font-weight: bold; }
+        .employee-info-box h2 { margin: 0 0 5px 0; color: #333; font-size: 18px; font-weight: normal; }
+        .employee-info-box p { margin: 0; color: #666; font-size: 14px; }
         .field { margin-bottom: 12px; padding: 8px; border-bottom: 1px solid #eee; }
         .label { font-weight: bold; display: inline-block; width: 250px; color: #0073aa; }
         .value { display: inline-block; color: #333; }
         .section { margin: 25px 0; }
         .section-title { font-size: 16px; font-weight: bold; color: #0073aa; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 15px; }
-        @media print { body { margin: 0; } .header { border-bottom: 2px solid #000; } }
-        .company-info { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; }
+        .pdf-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; font-size: 12px; color: #666; white-space: pre-line; }
+        @media print { body { margin: 0; } .pdf-header { border-bottom: 2px solid #000; } }
     </style>
 </head>
 <body>
-    <div class=\"header\">
+    <div class=\"pdf-header\">
+        <div class=\"pdf-header-left\">" . ($logo_url ? '<img src="' . esc_url($logo_url) . '" alt="Logo" class="pdf-logo" />' : '') . "</div>
+        <div class=\"pdf-header-right\">
+            <div class=\"pdf-header-text\">" . nl2br(esc_html($pdf_header_text)) . "</div>
+        </div>
+    </div>
+    
+    <div class=\"employee-info-box\">
         <h1>Mitarbeiterdatenblatt</h1>
         <h2>{$title}</h2>
         <p>Erstellt am: {$date}</p>
-    </div>
-    
-    <div class=\"company-info\">
-        <strong>" . get_bloginfo('name') . "</strong><br>
-        Mitarbeiterverwaltung
     </div>
     
     <div class=\"section\">
@@ -942,10 +971,8 @@ class RT_PDF_Generator_V2 {
     </div>
     " : "") . "
     
-    <div style=\"margin-top: 40px; text-align: center; font-size: 12px; color: #666;\">
-        <hr style=\"border: 1px solid #ddd; margin: 20px 0;\">
-        RT Employee Manager V2 - " . get_bloginfo('name') . "<br>
-        " . home_url() . "
+    <div class=\"pdf-footer\">
+        " . nl2br(esc_html($pdf_footer_text)) . "
     </div>
 </body>
 </html>";

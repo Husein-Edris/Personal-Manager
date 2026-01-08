@@ -16,6 +16,18 @@ class RT_Admin_Dashboard_V2 {
         
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'handle_kunden_form'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+    }
+    
+    /**
+     * Enqueue admin scripts and styles
+     */
+    public function enqueue_admin_scripts($hook) {
+        // Only load on settings page - check if we're on the settings page
+        if (isset($_GET['page']) && $_GET['page'] === 'rt-employee-manager-v2-settings') {
+            // Enqueue WordPress media uploader scripts
+            wp_enqueue_media();
+        }
     }
     
     /**
@@ -350,6 +362,7 @@ class RT_Admin_Dashboard_V2 {
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_email_body_template');
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_email_sender_name');
         register_setting('rt_employee_v2_settings', 'rt_employee_v2_email_sender_email');
+        register_setting('rt_employee_v2_settings', 'rt_employee_v2_pdf_logo');
     }
     
     /**
@@ -365,6 +378,7 @@ class RT_Admin_Dashboard_V2 {
             update_option('rt_employee_v2_email_body_template', wp_kses_post($_POST['email_body_template']));
             update_option('rt_employee_v2_email_sender_name', sanitize_text_field($_POST['email_sender_name']));
             update_option('rt_employee_v2_email_sender_email', sanitize_email($_POST['email_sender_email']));
+            update_option('rt_employee_v2_pdf_logo', intval($_POST['pdf_logo']));
             echo '<div class="notice notice-success"><p>' . __('Einstellungen gespeichert!', 'rt-employee-manager-v2') . '</p></div>';
         }
 
@@ -376,6 +390,8 @@ class RT_Admin_Dashboard_V2 {
         $email_body = get_option('rt_employee_v2_email_body_template', '');
         $email_sender_name = get_option('rt_employee_v2_email_sender_name', '');
         $email_sender_email = get_option('rt_employee_v2_email_sender_email', '');
+        $pdf_logo_id = get_option('rt_employee_v2_pdf_logo', 0);
+        $pdf_logo_url = $pdf_logo_id ? wp_get_attachment_image_url($pdf_logo_id, 'full') : '';
         ?>
         <div class="wrap">
             <h1><?php _e('RT Employee Manager V2 - Einstellungen', 'rt-employee-manager-v2'); ?></h1>
@@ -488,11 +504,27 @@ class RT_Admin_Dashboard_V2 {
                     <table class="form-table">
                         <tr>
                             <th scope="row">
-                                <label for="pdf_template_header"><?php _e('PDF Header Text', 'rt-employee-manager-v2'); ?></label>
+                                <label for="pdf_logo"><?php _e('Logo für PDF', 'rt-employee-manager-v2'); ?></label>
+                            </th>
+                            <td>
+                                <input type="hidden" id="pdf_logo" name="pdf_logo" value="<?php echo esc_attr($pdf_logo_id); ?>" />
+                                <div id="pdf_logo_preview" style="margin-bottom: 10px;">
+                                    <?php if ($pdf_logo_url): ?>
+                                        <img src="<?php echo esc_url($pdf_logo_url); ?>" style="max-height: 80px; max-width: 200px; border: 1px solid #ddd; padding: 5px; background: #fff;" />
+                                    <?php endif; ?>
+                                </div>
+                                <button type="button" class="button" id="pdf_logo_upload_btn"><?php echo $pdf_logo_url ? __('Logo ändern', 'rt-employee-manager-v2') : __('Logo auswählen', 'rt-employee-manager-v2'); ?></button>
+                                <button type="button" class="button" id="pdf_logo_remove_btn" style="<?php echo $pdf_logo_url ? '' : 'display:none;'; ?>"><?php _e('Logo entfernen', 'rt-employee-manager-v2'); ?></button>
+                                <p class="description"><?php _e('Logo wird oben links im PDF angezeigt (max. Höhe: 120px)', 'rt-employee-manager-v2'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="pdf_template_header"><?php _e('PDF Header Text (Top Right)', 'rt-employee-manager-v2'); ?></label>
                             </th>
                             <td>
                                 <textarea id="pdf_template_header" name="pdf_template_header" rows="3" class="large-text"><?php echo esc_textarea($pdf_header); ?></textarea>
-                                <p class="description"><?php _e('Zusätzlicher Text für PDF-Header (z.B. "Vertrauliche Mitarbeiterdaten")', 'rt-employee-manager-v2'); ?></p>
+                                <p class="description"><?php _e('Text wird oben rechts im PDF angezeigt (z.B. "Mitarbeiterdatenblatt | Interne Personalunterlage" oder "Mitarbeiterverwaltung"). Mehrzeilig möglich.', 'rt-employee-manager-v2'); ?></p>
                             </td>
                         </tr>
                         <tr>
@@ -500,12 +532,53 @@ class RT_Admin_Dashboard_V2 {
                                 <label for="pdf_template_footer"><?php _e('PDF Footer Text', 'rt-employee-manager-v2'); ?></label>
                             </th>
                             <td>
-                                <textarea id="pdf_template_footer" name="pdf_template_footer" rows="3" class="large-text"><?php echo esc_textarea($pdf_footer); ?></textarea>
-                                <p class="description"><?php _e('Zusätzlicher Text für PDF-Footer (z.B. Datenschutz-Hinweise)', 'rt-employee-manager-v2'); ?></p>
+                                <textarea id="pdf_template_footer" name="pdf_template_footer" rows="4" class="large-text"><?php echo esc_textarea($pdf_footer); ?></textarea>
+                                <p class="description"><?php _e('Text wird im Footer am Ende des PDFs angezeigt (z.B. "Die Verarbeitung der personenbezogenen Daten erfolgt gemäß DSGVO."). Mehrzeilig möglich.', 'rt-employee-manager-v2'); ?></p>
                             </td>
                         </tr>
                     </table>
                 </div>
+                
+                <script>
+                jQuery(document).ready(function($) {
+                    var mediaUploader;
+                    
+                    $('#pdf_logo_upload_btn').on('click', function(e) {
+                        e.preventDefault();
+                        
+                        if (mediaUploader) {
+                            mediaUploader.open();
+                            return;
+                        }
+                        
+                        mediaUploader = wp.media({
+                            title: '<?php _e('Logo auswählen', 'rt-employee-manager-v2'); ?>',
+                            button: {
+                                text: '<?php _e('Logo verwenden', 'rt-employee-manager-v2'); ?>'
+                            },
+                            multiple: false
+                        });
+                        
+                        mediaUploader.on('select', function() {
+                            var attachment = mediaUploader.state().get('selection').first().toJSON();
+                            $('#pdf_logo').val(attachment.id);
+                            $('#pdf_logo_preview').html('<img src="' + attachment.url + '" style="max-height: 80px; max-width: 200px; border: 1px solid #ddd; padding: 5px; background: #fff;" />');
+                            $('#pdf_logo_upload_btn').text('<?php _e('Logo ändern', 'rt-employee-manager-v2'); ?>');
+                            $('#pdf_logo_remove_btn').show();
+                        });
+                        
+                        mediaUploader.open();
+                    });
+                    
+                    $('#pdf_logo_remove_btn').on('click', function(e) {
+                        e.preventDefault();
+                        $('#pdf_logo').val('');
+                        $('#pdf_logo_preview').html('');
+                        $('#pdf_logo_upload_btn').text('<?php _e('Logo auswählen', 'rt-employee-manager-v2'); ?>');
+                        $('#pdf_logo_remove_btn').hide();
+                    });
+                });
+                </script>
                 
                 <?php submit_button(__('Einstellungen speichern', 'rt-employee-manager-v2')); ?>
             </form>
