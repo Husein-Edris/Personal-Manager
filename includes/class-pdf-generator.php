@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Memory-safe PDF Generator - Simple version to prevent memory exhaustion
+ * Handles PDF creation and email sending for employee data
  */
 class RT_PDF_Generator_V2 {
     
@@ -16,7 +16,7 @@ class RT_PDF_Generator_V2 {
     }
     
     /**
-     * Generate PDF for employee (AJAX endpoint)
+     * Handle AJAX request to generate PDF
      */
     public function ajax_generate_employee_pdf() {
         if (!wp_verify_nonce($_POST['nonce'], 'generate_pdf_v2')) {
@@ -28,7 +28,7 @@ class RT_PDF_Generator_V2 {
             wp_send_json_error('Invalid employee ID');
         }
         
-        // Check permissions
+        // Make sure user can access this employee
         if (!current_user_can('manage_options')) {
             $user = wp_get_current_user();
             if (!in_array('kunden_v2', $user->roles)) {
@@ -52,7 +52,7 @@ class RT_PDF_Generator_V2 {
     
     
     /**
-     * Generate and view PDF in one step (AJAX endpoint)
+     * Generate PDF and show it directly in browser
      */
     public function ajax_generate_and_view_employee_pdf() {
         if (!wp_verify_nonce($_GET['nonce'], 'generate_view_pdf_v2')) {
@@ -64,7 +64,7 @@ class RT_PDF_Generator_V2 {
             wp_die('Invalid employee ID');
         }
         
-        // Check permissions
+        // Same permission check as above
         if (!current_user_can('manage_options')) {
             $user = wp_get_current_user();
             if (!in_array('kunden_v2', $user->roles)) {
@@ -77,19 +77,19 @@ class RT_PDF_Generator_V2 {
             }
         }
         
-        // Generate fresh PDF with current data
+        // Get the employee post
         $employee = get_post($employee_id);
         if (!$employee || $employee->post_type !== 'angestellte_v2') {
             wp_die('Invalid employee');
         }
         
-        // Get current employee data
+        // Pull all the employee data
         $data = $this->get_all_employee_data($employee_id);
         
-        // Create fresh HTML with latest data
+        // Build HTML version (not used here but available)
         $html = $this->create_complete_html($employee, $data);
         
-        // Create actual PDF content
+        // Create the actual PDF
         $pdf_content = $this->create_actual_pdf($employee, $data);
         
         $filename = 'mitarbeiter-' . sanitize_title($employee->post_title) . '.pdf';
@@ -105,7 +105,7 @@ class RT_PDF_Generator_V2 {
     }
 
     /**
-     * Email employee PDF (AJAX endpoint)
+     * Handle email sending via AJAX
      */
     public function ajax_email_employee_pdf() {
         if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'email_pdf_v2')) {
@@ -117,16 +117,25 @@ class RT_PDF_Generator_V2 {
             wp_send_json_error('Invalid employee ID');
         }
         
-        // Check permissions
-        if (!current_user_can('manage_options')) {
-            $user = wp_get_current_user();
-            if (!in_array('kunden_v2', $user->roles)) {
-                wp_send_json_error('No permission');
-            }
-            
+        // Check who's trying to send this
+        $user = wp_get_current_user();
+        if (!$user || $user->ID == 0) {
+            wp_send_json_error('User not authenticated');
+        }
+        
+        // Either admin or client user
+        $is_admin = current_user_can('manage_options');
+        $is_customer = in_array('kunden_v2', $user->roles) || in_array('kunden', $user->roles);
+        
+        if (!$is_admin && !$is_customer) {
+            wp_send_json_error('No permission - invalid role');
+        }
+        
+        // Clients can only email their own employees
+        if (!$is_admin) {
             $employer_id = get_post_meta($employee_id, 'employer_id', true);
             if ($employer_id != $user->ID) {
-                wp_send_json_error('No permission for this employee');
+                wp_send_json_error('No permission for this employee - ownership check failed');
             }
         }
         
