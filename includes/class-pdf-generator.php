@@ -41,7 +41,8 @@ class RT_PDF_Generator_V2 {
             }
         }
         
-        $pdf_url = $this->generate_simple_pdf($employee_id);
+        // Use unified PDF generation method
+        $pdf_url = $this->generate_employee_pdf_file($employee_id);
         
         if ($pdf_url) {
             wp_send_json_success(array('pdf_url' => $pdf_url));
@@ -52,7 +53,7 @@ class RT_PDF_Generator_V2 {
     
     
     /**
-     * Generate PDF and show it directly in browser
+     * Generate PDF and show it directly in browser (uses unified PDF generation method)
      */
     public function ajax_generate_and_view_employee_pdf() {
         if (!wp_verify_nonce($_GET['nonce'], 'generate_view_pdf_v2')) {
@@ -77,21 +78,15 @@ class RT_PDF_Generator_V2 {
             }
         }
         
-        // Get the employee post
-        $employee = get_post($employee_id);
-        if (!$employee || $employee->post_type !== 'angestellte_v2') {
-            wp_die('Invalid employee');
+        // Generate PDF content using unified method (same as email)
+        $pdf_content = $this->generate_employee_pdf_content($employee_id);
+        
+        if ($pdf_content === false || empty($pdf_content)) {
+            wp_die('Failed to generate PDF');
         }
         
-        // Pull all the employee data
-        $data = $this->get_all_employee_data($employee_id);
-        
-        // Build HTML version (not used here but available)
-        $html = $this->create_complete_html($employee, $data);
-        
-        // Create the actual PDF
-        $pdf_content = $this->create_actual_pdf($employee, $data);
-        
+        // Get employee for filename
+        $employee = get_post($employee_id);
         $filename = 'mitarbeiter-' . sanitize_title($employee->post_title) . '.pdf';
         
         header('Content-Type: application/pdf');
@@ -152,8 +147,8 @@ class RT_PDF_Generator_V2 {
             wp_send_json_error('Customer email is required');
         }
         
-        // Generate PDF
-        $pdf_url = $this->generate_simple_pdf($employee_id);
+        // Generate PDF using unified method (saves to file for email attachment)
+        $pdf_url = $this->generate_employee_pdf_file($employee_id);
         if (!$pdf_url) {
             wp_send_json_error('Failed to generate PDF');
         }
@@ -297,19 +292,49 @@ class RT_PDF_Generator_V2 {
     }
     
     /**
-     * Generate simple PDF using DomPDF
+     * UNIFIED METHOD: Generate PDF content from employee ID (single source of truth)
+     * Used by both view and email functions - all PDF generation goes through here
+     * 
+     * @param int $employee_id The employee post ID
+     * @return string|false PDF binary content on success, false on failure
      */
-    private function generate_simple_pdf($employee_id) {
+    private function generate_employee_pdf_content($employee_id) {
+        // Get employee post
         $employee = get_post($employee_id);
         if (!$employee || $employee->post_type !== 'angestellte_v2') {
             return false;
         }
         
-        // Check if DomPDF is available
-        if (!class_exists('\Dompdf\Dompdf')) {
-            error_log('RT Employee Manager V2: DomPDF not found. Please run composer install.');
-            // Fallback to manual PDF creation
-            return $this->generate_manual_pdf($employee_id);
+        // Get all employee data
+        $data = $this->get_all_employee_data($employee_id);
+        
+        // Create HTML template (single source for all PDFs)
+        $html = $this->create_complete_html($employee, $data);
+        
+        // Generate PDF from HTML using DomPDF (preferred method)
+        $pdf_content = $this->generate_pdf_from_html($html);
+        
+        // Fallback to manual PDF generation if DomPDF fails
+        if ($pdf_content === false) {
+            $pdf_content = $this->create_actual_pdf($employee, $data);
+        }
+        
+        return $pdf_content;
+    }
+    
+    /**
+     * Generate PDF file and save to uploads directory (for email attachments)
+     * Uses the unified generate_employee_pdf_content() method
+     * 
+     * @param int $employee_id The employee post ID
+     * @return string|false PDF file URL on success, false on failure
+     */
+    private function generate_employee_pdf_file($employee_id) {
+        // Generate PDF content using unified method
+        $pdf_content = $this->generate_employee_pdf_content($employee_id);
+        
+        if ($pdf_content === false || empty($pdf_content)) {
+            return false;
         }
         
         // Create upload directory
@@ -324,11 +349,28 @@ class RT_PDF_Generator_V2 {
         $filename = "employee-{$employee_id}-{$timestamp}.pdf";
         $file_path = $pdf_dir . $filename;
         
-        // Get complete employee data
-        $data = $this->get_all_employee_data($employee_id);
+        // Save PDF to file
+        if (file_put_contents($file_path, $pdf_content)) {
+            update_post_meta($employee_id, '_latest_pdf_path', $file_path);
+            update_post_meta($employee_id, '_latest_pdf_url', $upload_dir['baseurl'] . '/employee-pdfs/' . $filename);
+            return $upload_dir['baseurl'] . '/employee-pdfs/' . $filename;
+        }
         
-        // Create complete HTML
-        $html = $this->create_complete_html($employee, $data);
+        return false;
+    }
+    
+    /**
+     * Generate PDF content from HTML using DomPDF
+     * 
+     * @param string $html HTML content to convert
+     * @return string|false PDF binary content on success, false on failure
+     */
+    private function generate_pdf_from_html($html) {
+        // Check if DomPDF is available
+        if (!class_exists('\Dompdf\Dompdf')) {
+            error_log('RT Employee Manager V2: DomPDF not found. Please run composer install.');
+            return false;
+        }
         
         try {
             // Use DomPDF to convert HTML to PDF
@@ -337,56 +379,12 @@ class RT_PDF_Generator_V2 {
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
             
-            // Save PDF to file
-            $pdf_output = $dompdf->output();
-            if (file_put_contents($file_path, $pdf_output)) {
-                update_post_meta($employee_id, '_latest_pdf_path', $file_path);
-                update_post_meta($employee_id, '_latest_pdf_url', $upload_dir['baseurl'] . '/employee-pdfs/' . $filename);
-                return $upload_dir['baseurl'] . '/employee-pdfs/' . $filename;
-            }
+            // Return PDF content
+            return $dompdf->output();
         } catch (Exception $e) {
             error_log('RT Employee Manager V2: PDF generation error: ' . $e->getMessage());
-            // Fallback to manual PDF creation
-            return $this->generate_manual_pdf($employee_id);
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Generate PDF manually (fallback when DomPDF is not available)
-     */
-    private function generate_manual_pdf($employee_id) {
-        $employee = get_post($employee_id);
-        if (!$employee || $employee->post_type !== 'angestellte_v2') {
             return false;
         }
-        
-        // Create upload directory
-        $upload_dir = wp_upload_dir();
-        $pdf_dir = $upload_dir['basedir'] . '/employee-pdfs/';
-        if (!file_exists($pdf_dir)) {
-            wp_mkdir_p($pdf_dir);
-        }
-        
-        // Generate PDF filename
-        $timestamp = time();
-        $filename = "employee-{$employee_id}-{$timestamp}.pdf";
-        $file_path = $pdf_dir . $filename;
-        
-        // Get complete employee data
-        $data = $this->get_all_employee_data($employee_id);
-        
-        // Create actual PDF content
-        $pdf_content = $this->create_actual_pdf($employee, $data);
-        
-        if (file_put_contents($file_path, $pdf_content)) {
-            update_post_meta($employee_id, '_latest_pdf_path', $file_path);
-            update_post_meta($employee_id, '_latest_pdf_url', $upload_dir['baseurl'] . '/employee-pdfs/' . $filename);
-            return $upload_dir['baseurl'] . '/employee-pdfs/' . $filename;
-        }
-        
-        return false;
     }
     
     /**
