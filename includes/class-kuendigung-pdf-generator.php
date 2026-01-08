@@ -9,43 +9,6 @@ if (!defined('ABSPATH')) {
  */
 class RT_Kuendigung_PDF_Generator_V2 {
     
-    /**
-     * Generate Kündigung PDF and send email
-     * 
-     * @param int $kuendigung_id The Kündigung post ID
-     * @param int $employee_id The employee post ID
-     * @return array Result with success status and optional error message
-     */
-    public function generate_and_email_kuendigung($kuendigung_id, $employee_id) {
-        // Get Kündigung data
-        $kuendigung = get_post($kuendigung_id);
-        if (!$kuendigung || $kuendigung->post_type !== 'kuendigung_v2') {
-            return array('success' => false, 'error' => 'Invalid Kündigung');
-        }
-        
-        // Get employee data
-        $employee = get_post($employee_id);
-        if (!$employee || $employee->post_type !== 'angestellte_v2') {
-            return array('success' => false, 'error' => 'Invalid employee');
-        }
-        
-        // Generate PDF
-        $pdf_content = $this->generate_kuendigung_pdf_content($kuendigung_id, $employee_id);
-        if ($pdf_content === false) {
-            return array('success' => false, 'error' => 'PDF generation failed');
-        }
-        
-        // Save PDF to file for email attachment
-        $pdf_file = $this->save_pdf_to_file($pdf_content, $kuendigung_id, $employee_id);
-        if ($pdf_file === false) {
-            return array('success' => false, 'error' => 'Failed to save PDF file');
-        }
-        
-        // Send email
-        $email_result = $this->send_kuendigung_email($kuendigung_id, $employee_id, $pdf_file);
-        
-        return $email_result;
-    }
     
     /**
      * Generate Kündigung PDF content
@@ -471,30 +434,47 @@ class RT_Kuendigung_PDF_Generator_V2 {
     }
     
     /**
-     * Send Kündigung email with PDF attachment
+     * Send Kündigung email with PDF attachment (manual)
+     * 
+     * @param int $kuendigung_id The Kündigung post ID
+     * @param int $employee_id The employee post ID
+     * @param string $employee_email The employee email address
+     * @param bool $send_to_employee Whether to send to employee
+     * @param bool $send_to_bookkeeping Whether to send to bookkeeping
+     * @return array Result with success status and optional error message
      */
-    private function send_kuendigung_email($kuendigung_id, $employee_id, $pdf_file) {
+    public function send_kuendigung_email_manual($kuendigung_id, $employee_id, $employee_email, $send_to_employee, $send_to_bookkeeping) {
+        // Generate PDF
+        $pdf_content = $this->generate_kuendigung_pdf_content($kuendigung_id, $employee_id);
+        if ($pdf_content === false) {
+            return array('success' => false, 'error' => 'PDF generation failed');
+        }
+        
+        // Save PDF to file for email attachment
+        $pdf_file = $this->save_pdf_to_file($pdf_content, $kuendigung_id, $employee_id);
+        if ($pdf_file === false) {
+            return array('success' => false, 'error' => 'Failed to save PDF file');
+        }
+        
         $kuendigung_data = $this->get_kuendigung_data($kuendigung_id);
         $employee_data = $this->get_employee_data($employee_id);
         
-        // Recipients
-        $employee_email = $employee_data['email'] ?? '';
-        if (empty($employee_email)) {
-            return array('success' => false, 'error' => 'Employee email not found');
+        // Build recipients list
+        $recipients = array();
+        
+        if ($send_to_employee && !empty($employee_email)) {
+            $recipients[] = $employee_email;
         }
         
-        $recipients = array($employee_email);
-        
-        // Optional: Add customer email if available
-        $employer_email = $kuendigung_data['employer_email'] ?? '';
-        if (!empty($employer_email) && $employer_email !== $employee_email) {
-            $recipients[] = $employer_email;
+        if ($send_to_bookkeeping) {
+            $bookkeeping_email = get_option('rt_employee_v2_buchhaltung_email', '');
+            if (!empty($bookkeeping_email)) {
+                $recipients[] = $bookkeeping_email;
+            }
         }
         
-        // Optional: Add bookkeeping email from settings
-        $bookkeeping_email = get_option('rt_employee_v2_buchhaltung_email', '');
-        if (!empty($bookkeeping_email)) {
-            $recipients[] = $bookkeeping_email;
+        if (empty($recipients)) {
+            return array('success' => false, 'error' => 'No recipients selected');
         }
         
         // Email subject
