@@ -646,20 +646,38 @@ class RT_Employee_Meta_Boxes_V2 {
             return;
         }
 
-        // Use jquery as dependency since it's always available in WP admin
-        wp_enqueue_script('jquery');
+        // Register and enqueue our own script handle with an empty source
+        // This ensures wp_localize_script and wp_add_inline_script work properly
+        wp_register_script(
+            'rt-employee-manager-v2-admin',
+            false, // No source file, we'll use inline
+            array('jquery'),
+            RT_EMPLOYEE_V2_VERSION,
+            true // In footer for better execution timing
+        );
         
         // Localize script with AJAX URL and nonce
-        wp_localize_script('jquery', 'rtEmployeeManagerV2', array(
+        wp_localize_script('rt-employee-manager-v2-admin', 'rtEmployeeManagerV2', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('email_pdf_v2')
         ));
         
-        wp_add_inline_script('jquery', '
+        // Add our inline script
+        $ajax_url = esc_js(admin_url('admin-ajax.php'));
+        $nonce = wp_create_nonce('email_pdf_v2');
+        
+        wp_add_inline_script('rt-employee-manager-v2-admin', '
             (function($) {
+                "use strict";
+                
+                console.log("RT Employee Manager V2: Script file loaded, waiting for DOM ready...");
+                
                 $(document).ready(function() {
+                    console.log("RT Employee Manager V2: DOM ready, initializing...");
+                    
                     const svnrField = document.getElementById("sozialversicherungsnummer");
                     if (svnrField) {
+                        console.log("RT Employee Manager V2: SVNR field found");
                         // Only allow numbers, max 10 digits
                         svnrField.addEventListener("input", function(e) {
                             e.target.value = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
@@ -692,6 +710,8 @@ class RT_Employee_Meta_Boxes_V2 {
                                 hideSVNRError();
                             }
                         });
+                    } else {
+                        console.warn("RT Employee Manager V2: SVNR field not found");
                     }
                     
                     // Simple SVNR validation function - only check for 10 digits
@@ -701,7 +721,7 @@ class RT_Employee_Meta_Boxes_V2 {
                     
                     function showSVNRError(message) {
                         let errorDiv = document.getElementById("svnr-error");
-                        if (!errorDiv) {
+                        if (!errorDiv && svnrField) {
                             errorDiv = document.createElement("div");
                             errorDiv.id = "svnr-error";
                             errorDiv.style.color = "#dc3232";
@@ -709,7 +729,9 @@ class RT_Employee_Meta_Boxes_V2 {
                             errorDiv.style.marginTop = "5px";
                             svnrField.parentNode.appendChild(errorDiv);
                         }
-                        errorDiv.textContent = message;
+                        if (errorDiv) {
+                            errorDiv.textContent = message;
+                        }
                     }
                     
                     function hideSVNRError() {
@@ -719,8 +741,13 @@ class RT_Employee_Meta_Boxes_V2 {
                     
                     // PDF Email functionality
                     const sendEmailBtn = document.getElementById("send-pdf-email");
+                    console.log("RT Employee Manager V2: Looking for send-pdf-email button...", sendEmailBtn);
+                    
                     if (sendEmailBtn) {
+                        console.log("RT Employee Manager V2: PDF email button found, attaching listener...");
+                        
                         sendEmailBtn.addEventListener("click", function(e) {
+                            console.log("RT Employee Manager V2: PDF email button clicked!");
                             e.preventDefault();
                             e.stopPropagation();
                             
@@ -732,6 +759,12 @@ class RT_Employee_Meta_Boxes_V2 {
                             const shouldSendToCustomer = sendToCustomer ? sendToCustomer.checked : false;
                             const shouldSendToBookkeeping = sendToBookkeeping ? sendToBookkeeping.checked : false;
                             
+                            console.log("RT Employee Manager V2: Email values:", {
+                                customerEmail: customerEmail,
+                                shouldSendToCustomer: shouldSendToCustomer,
+                                shouldSendToBookkeeping: shouldSendToBookkeeping
+                            });
+                            
                             // Validation
                             if (!shouldSendToCustomer && !shouldSendToBookkeeping) {
                                 alert("Bitte wählen Sie mindestens einen Empfänger aus.");
@@ -740,14 +773,14 @@ class RT_Employee_Meta_Boxes_V2 {
                             
                             if (shouldSendToCustomer && !customerEmail) {
                                 alert("Bitte geben Sie eine E-Mail-Adresse ein.");
-                                emailInput.focus();
+                                if (emailInput) emailInput.focus();
                                 return;
                             }
                             
                             // Basic email validation
                             if (shouldSendToCustomer && customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
                                 alert("Bitte geben Sie eine gültige E-Mail-Adresse ein.");
-                                emailInput.focus();
+                                if (emailInput) emailInput.focus();
                                 return;
                             }
                             
@@ -767,8 +800,14 @@ class RT_Employee_Meta_Boxes_V2 {
                             }
                             
                             // Send AJAX request
-                            const ajaxUrl = typeof rtEmployeeManagerV2 !== "undefined" ? rtEmployeeManagerV2.ajaxurl : "' . esc_js(admin_url('admin-ajax.php')) . '";
-                            const nonce = typeof rtEmployeeManagerV2 !== "undefined" ? rtEmployeeManagerV2.nonce : "' . wp_create_nonce('email_pdf_v2') . '";
+                            const ajaxUrl = (typeof rtEmployeeManagerV2 !== "undefined" && rtEmployeeManagerV2.ajaxurl) 
+                                ? rtEmployeeManagerV2.ajaxurl 
+                                : "' . $ajax_url . '";
+                            const nonce = (typeof rtEmployeeManagerV2 !== "undefined" && rtEmployeeManagerV2.nonce) 
+                                ? rtEmployeeManagerV2.nonce 
+                                : "' . $nonce . '";
+                            
+                            console.log("RT Employee Manager V2: Sending AJAX request to:", ajaxUrl);
                             
                             fetch(ajaxUrl, {
                                 method: "POST",
@@ -783,11 +822,11 @@ class RT_Employee_Meta_Boxes_V2 {
                                 })
                             })
                             .then(response => {
-                                console.log("Response status:", response.status);
+                                console.log("RT Employee Manager V2: Response status:", response.status);
                                 return response.text();
                             })
                             .then(text => {
-                                console.log("Raw response:", text);
+                                console.log("RT Employee Manager V2: Raw response:", text);
                                 try {
                                     const data = JSON.parse(text);
                                     if (data.success) {
@@ -800,12 +839,12 @@ class RT_Employee_Meta_Boxes_V2 {
                                         alert("Fehler: " + (data.data || "Unbekannter Fehler"));
                                     }
                                 } catch (e) {
-                                    console.error("JSON parse error:", e, "Response:", text);
+                                    console.error("RT Employee Manager V2: JSON parse error:", e, "Response:", text);
                                     alert("Server response error: " + text.substring(0, 200));
                                 }
                             })
                             .catch(error => {
-                                console.error("Fetch error:", error);
+                                console.error("RT Employee Manager V2: Fetch error:", error);
                                 alert("Fehler beim Senden: " + error.message);
                             })
                             .finally(() => {
@@ -815,14 +854,17 @@ class RT_Employee_Meta_Boxes_V2 {
                             });
                         });
                         
-                        console.log("RT Employee Manager V2: PDF email button event listener attached");
+                        console.log("RT Employee Manager V2: ✓ PDF email button event listener attached successfully");
                     } else {
-                        console.warn("RT Employee Manager V2: send-pdf-email button not found");
+                        console.warn("RT Employee Manager V2: ✗ send-pdf-email button not found on page");
                     }
                     
-                    console.log("RT Employee Manager V2: Meta box with SVNR validation and email functionality loaded");
+                    console.log("RT Employee Manager V2: ✓ Meta box with SVNR validation and email functionality fully loaded");
                 });
             })(jQuery);
         ');
+        
+        // Enqueue the script (this actually outputs it)
+        wp_enqueue_script('rt-employee-manager-v2-admin');
     }
 }
