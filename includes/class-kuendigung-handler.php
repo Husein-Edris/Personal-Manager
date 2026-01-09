@@ -61,8 +61,27 @@ class RT_Kuendigung_Handler_V2 {
         $employee_email = $employee_data['email'] ?? '';
         $ajax_url = admin_url('admin-ajax.php');
         $nonce = wp_create_nonce('email_kuendigung_v2');
+        
+        // Check if Kündigung was just created
+        $kuendigung_created = isset($_GET['kuendigung_created']) && $_GET['kuendigung_created'] === '1';
         ?>
 <div class="rt-kuendigung-actions" style="padding: 10px;">
+        <?php if ($kuendigung_created): ?>
+        <div class="notice notice-success is-dismissible" style="background: #d4edda; border-left: 4px solid #28a745; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+            <p style="margin: 0; color: #155724; font-weight: bold;">
+                <span style="font-size: 18px; margin-right: 8px;">✓</span>
+                <?php _e('Kündigung erfolgreich erstellt!', 'rt-employee-manager-v2'); ?>
+            </p>
+            <p style="margin: 5px 0 0 0; color: #155724; font-size: 13px;">
+                <?php 
+                $status = get_post_meta($post->ID, 'status', true);
+                if ($status === 'terminated') {
+                    _e('Der Beschäftigungsstatus wurde auf "Ausgeschieden" geändert.', 'rt-employee-manager-v2');
+                }
+                ?>
+            </p>
+        </div>
+        <?php endif; ?>
     <style>
     .rt-kuendigung-actions .button {
         width: 100%;
@@ -135,6 +154,19 @@ class RT_Kuendigung_Handler_V2 {
     #kuendigung-error-summary ul {
         margin: 10px 0 0 20px;
         padding: 0;
+    }
+    .notice-success {
+        animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
     </style>
 
@@ -407,17 +439,31 @@ class RT_Kuendigung_Handler_V2 {
         $ajax_url = admin_url('admin-ajax.php');
         $nonce = wp_create_nonce('email_kuendigung_v2');
         
-        // Register a custom script handle for Kündigung functionality
-        wp_register_script('rt-kuendigung-v2', false, array('jquery'), RT_EMPLOYEE_V2_VERSION, true);
-        wp_localize_script('rt-kuendigung-v2', 'rtKuendigungV2', array(
+        // Localize script data - attach to jquery
+        wp_localize_script('jquery', 'rtKuendigungV2', array(
             'ajaxurl' => $ajax_url,
             'nonce' => $nonce
         ));
-        wp_enqueue_script('rt-kuendigung-v2');
         
-        // Add inline script (simplified - no debug logging)
-        wp_add_inline_script('rt-kuendigung-v2', '
-            (function($) {
+        // Add inline script attached to jquery
+        wp_add_inline_script('jquery', '
+            jQuery(document).ready(function($) {
+                // Ensure rtKuendigungV2 is available
+                if (typeof rtKuendigungV2 === "undefined") {
+                    console.error("rtKuendigungV2 not defined");
+                    return;
+                }
+                
+                // Auto-dismiss success message after 5 seconds
+                $(".notice-success").each(function() {
+                    var $notice = $(this);
+                    setTimeout(function() {
+                        $notice.fadeOut(300, function() {
+                            $notice.remove();
+                        });
+                    }, 5000);
+                });
+                
                 function isValidEmail(email) {
                     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
                 }
@@ -526,8 +572,7 @@ class RT_Kuendigung_Handler_V2 {
                     return isValid;
                 }
 
-                $(document).ready(function() {
-                    var formModified = false;
+                var formModified = false;
 
                     function updateKuendigungButtonState() {
                         var statusValue = $("#status").val();
@@ -629,27 +674,47 @@ class RT_Kuendigung_Handler_V2 {
                             $(".field-error").remove();
                             $("#kuendigung-error-summary").hide();
                             $("input, select, textarea").css("border-color", "");
-                            $("#kuendigung-form")[0].reset();
+                            var $form = $("#kuendigung-form");
+                            if ($form.length > 0 && $form[0]) {
+                                $form[0].reset();
+                            }
                         }
                     });
 
+                    // Form submit handler - prevent default submission
                     $(document).on("submit", "#kuendigung-form", function(e) {
                         e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
                         
-                        // Validate before submit
+                        console.log("Form submit triggered");
+                        
+                        var $form = $(this);
+                        
+                        // Validate before submit - MUST pass validation
                         if (!validateForm()) {
+                            console.log("Validation failed - preventing submission");
+                            // Scroll to first error
+                            var $firstError = $form.find(".field-error").first();
+                            if ($firstError.length) {
+                                $("html, body").animate({ 
+                                    scrollTop: $firstError.closest("tr, .form-field").offset().top - 100 
+                                }, 300);
+                            }
                             return false;
                         }
 
-                        var $form = $(this);
                         var submitBtn = $form.find("button[type=submit]");
                         var originalText = submitBtn.text();
                         submitBtn.prop("disabled", true).text("Erstelle Kündigung...");
 
                         var emailAddress = $("#kuendigung-email-address").val().trim();
-                        var data = $form.serialize() + "&action=create_kuendigung_v2";
+                        var formData = $form.serialize();
+                        var data = formData + "&action=create_kuendigung_v2";
                         data += "&email_address=" + encodeURIComponent(emailAddress);
                         data += "&send_to_bookkeeping=" + ($("#send-to-bookkeeping-on-create").is(":checked") ? "1" : "");
+
+                        console.log("Sending AJAX request:", data);
 
                         $.ajax({
                             url: rtKuendigungV2.ajaxurl,
@@ -657,24 +722,74 @@ class RT_Kuendigung_Handler_V2 {
                             dataType: "json",
                             data: data,
                             success: function(response) {
+                                console.log("AJAX success:", response);
                                 if (response && response.success) {
                                     formModified = false;
                                     $("#kuendigung-modal").hide();
-                                    alert("✓ " + (response.data.message || "Kündigung erstellt"));
-                                    location.reload(true);
+                                    
+                                    // Add success parameter to URL for message display
+                                    var url = new URL(window.location.href);
+                                    url.searchParams.set("kuendigung_created", "1");
+                                    url.searchParams.set("kuendigung_id", response.data.kuendigung_id || "");
+                                    
+                                    // Show success message and reload
+                                    window.location.href = url.toString();
                                 } else {
                                     alert("Fehler: " + (response.data || "Unbekannter Fehler"));
                                     submitBtn.prop("disabled", false).text(originalText);
                                 }
                             },
-                            error: function(xhr) {
+                            error: function(xhr, status, error) {
+                                console.error("AJAX error:", status, error, xhr);
                                 var msg = "Fehler beim Erstellen der Kündigung";
-                                try { msg = JSON.parse(xhr.responseText).data || msg; } catch(e) {}
+                                try { 
+                                    var response = JSON.parse(xhr.responseText);
+                                    msg = response.data || msg;
+                                } catch(e) {
+                                    console.error("Parse error:", e);
+                                }
                                 alert(msg);
                                 submitBtn.prop("disabled", false).text(originalText);
                             }
                         });
                         return false;
+                    });
+                    
+                    // Prevent button from submitting if validation fails
+                    $(document).on("click", "#kuendigung-form button[type=submit]", function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        
+                        // Trigger validation first - MUST pass
+                        if (!validateForm()) {
+                            console.log("Validation failed on button click - submission blocked");
+                            return false;
+                        }
+                        
+                        // If validation passes, trigger submit
+                        $("#kuendigung-form").trigger("submit");
+                        return false;
+                    });
+                    
+                    // Also prevent Enter key submission if validation fails
+                    $(document).on("keydown", "#kuendigung-form", function(e) {
+                        if (e.key === "Enter" || e.keyCode === 13) {
+                            var $target = $(e.target);
+                            // Allow Enter in textareas
+                            if ($target.is("textarea")) {
+                                return true;
+                            }
+                            // For other fields, prevent default and validate
+                            e.preventDefault();
+                            if (!validateForm()) {
+                                console.log("Validation failed on Enter key - submission blocked");
+                                return false;
+                            }
+                            // If valid, trigger submit
+                            $("#kuendigung-form").trigger("submit");
+                            return false;
+                        }
                     });
 
                     $(document).on("click", ".send-kuendigung-email", function(e) {
@@ -722,8 +837,7 @@ class RT_Kuendigung_Handler_V2 {
                         });
                     });
                 });
-            })(jQuery);
-        ', 'after');
+        ');
     }
     
     /**
@@ -746,13 +860,13 @@ class RT_Kuendigung_Handler_V2 {
             wp_send_json_error('No permission');
         }
         if (!$is_admin && get_post_meta($employee_id, 'employer_id', true) != $user->ID) {
-            wp_send_json_error('No permission for this employee');
+                wp_send_json_error('No permission for this employee');
         }
         
         $required = array('kuendigungsart', 'kuendigungsdatum', 'beendigungsdatum', 'kuendigungsgrund', 'employer_name', 'employer_email');
         foreach ($required as $field) {
             if (empty($_POST[$field])) {
-                wp_send_json_error('Bitte füllen Sie alle Pflichtfelder aus');
+            wp_send_json_error('Bitte füllen Sie alle Pflichtfelder aus');
             }
         }
         
