@@ -91,24 +91,11 @@ class RT_Kuendigung_PDF_Generator_V2 {
             $employee_name = $employee->post_title;
         }
         
-        // Get logo
-        $logo_id = get_option('rt_employee_v2_pdf_logo', 0);
-        $logo_src = '';
-        if ($logo_id) {
-            $logo_path = get_attached_file($logo_id);
-            if ($logo_path && file_exists($logo_path)) {
-                $logo_mime = get_post_mime_type($logo_id);
-                if (in_array($logo_mime, array('image/jpeg', 'image/png', 'image/gif'))) {
-                    $logo_data = file_get_contents($logo_path);
-                    $logo_base64 = base64_encode($logo_data);
-                    $logo_src = 'data:' . $logo_mime . ';base64,' . $logo_base64;
-                }
-            }
-        }
-        
-        // Get PDF header/footer text from settings
+        // Get PDF header/footer text from settings (same as MITARBEITERDATENBLATT)
         $pdf_header_text = get_option('rt_employee_v2_pdf_template_header', 'Mitarbeiterverwaltung');
         $pdf_footer_text = get_option('rt_employee_v2_pdf_template_footer', '');
+        $company_address = get_option('rt_employee_v2_company_address', '');
+        $company = get_bloginfo('name');
         
         // Generate Kündigung text
         $kuendigungstext = $this->generate_kuendigungstext($kuendigung_data, $employee_name, $employee_data);
@@ -125,22 +112,27 @@ class RT_Kuendigung_PDF_Generator_V2 {
             line-height: 1.6;
             color: #000;
         }
-        .header {
+        .pdf-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 20px;
             padding-bottom: 15px;
-            border-bottom: 2px solid #000;
+            border-bottom: 2px solid #333;
         }
-        .logo {
-            max-width: 150px;
-            max-height: 60px;
+        .pdf-header-left {
+            flex: 0 0 auto;
         }
-        .header-right {
+        .pdf-header-right {
+            flex: 1;
             text-align: right;
-            font-size: 14pt;
+            padding-top: 10px;
+        }
+        .pdf-header-text {
+            font-size: 16px;
             font-weight: bold;
+            color: #333;
+            white-space: pre-line;
         }
         .info-box {
             background-color: #f5f5f5;
@@ -207,26 +199,25 @@ class RT_Kuendigung_PDF_Generator_V2 {
             font-weight: bold;
             margin-bottom: 5px;
         }
-        .footer {
-            margin-top: 50px;
-            padding-top: 15px;
-            border-top: 1px solid #ccc;
-            font-size: 9pt;
-            color: #666;
+        .pdf-footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
             text-align: center;
+            font-size: 12px;
+            color: #666;
+            white-space: pre-line;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-left">';
-        
-        if ($logo_src) {
-            $html .= '<img src="' . esc_attr($logo_src) . '" alt="Logo" class="logo" />';
-        }
-        
-        $html .= '</div>
-        <div class="header-right">' . esc_html($pdf_header_text) . '</div>
+    <div class="pdf-header">
+        <div class="pdf-header-left">
+            <!-- Logo excluded as requested -->
+        </div>
+        <div class="pdf-header-right">
+            <div class="pdf-header-text">' . nl2br(esc_html($pdf_header_text)) . '</div>
+        </div>
     </div>
     
     <div class="info-box">
@@ -330,13 +321,33 @@ class RT_Kuendigung_PDF_Generator_V2 {
             <div class="signature-label">Unterschrift Arbeitgeber</div>
             <div style="margin-top: 40px;">_________________________</div>
         </div>
-    </div>';
+    </div>
     
-        if (!empty($pdf_footer_text)) {
-            $html .= '<div class="footer">' . esc_html($pdf_footer_text) . '</div>';
+    <div class="pdf-footer">';
+        
+        // Company address in footer (same as MITARBEITERDATENBLATT)
+        if (!empty($company_address)) {
+            $html .= '<div style="margin-bottom: 10px;">';
+            $html .= '<strong>' . esc_html($company) . '</strong><br>';
+            $address_lines = explode("\n", $company_address);
+            foreach ($address_lines as $line) {
+                if (!empty(trim($line))) {
+                    $html .= esc_html(trim($line)) . '<br>';
+                }
+            }
+            $html .= '</div>';
         }
         
-        $html .= '</body>
+        // Custom footer text (same as MITARBEITERDATENBLATT)
+        if (!empty($pdf_footer_text)) {
+            $html .= nl2br(esc_html($pdf_footer_text));
+        } else {
+            // Default footer if not set
+            $html .= esc_html($company) . '<br>' . esc_html(home_url());
+        }
+        
+        $html .= '</div>
+</body>
 </html>';
         
         return $html;
