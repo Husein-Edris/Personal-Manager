@@ -11,8 +11,8 @@ class RT_Kuendigung_Handler_V2 {
     
     public function __construct() {
         add_action('add_meta_boxes', array($this, 'add_kuendigung_meta_box'));
+        add_action('save_post_angestellte_v2', array($this, 'save_kuendigung_on_post_save'), 20);
         add_action('admin_enqueue_scripts', array($this, 'enqueue_kuendigung_scripts'));
-        add_action('wp_ajax_create_kuendigung_v2', array($this, 'ajax_create_kuendigung'));
         add_action('wp_ajax_email_kuendigung_v2', array($this, 'ajax_email_kuendigung'));
     }
     
@@ -73,12 +73,7 @@ class RT_Kuendigung_Handler_V2 {
                 <?php _e('Kündigung erfolgreich erstellt!', 'rt-employee-manager-v2'); ?>
             </p>
             <p style="margin: 5px 0 0 0; color: #155724; font-size: 13px;">
-                <?php 
-                $status = get_post_meta($post->ID, 'status', true);
-                if ($status === 'terminated') {
-                    _e('Der Beschäftigungsstatus wurde auf "Ausgeschieden" geändert.', 'rt-employee-manager-v2');
-                }
-                ?>
+                <?php _e('Der Beschäftigungsstatus wurde auf "Ausgeschieden" geändert.', 'rt-employee-manager-v2'); ?>
             </p>
         </div>
         <?php endif; ?>
@@ -138,9 +133,9 @@ class RT_Kuendigung_Handler_V2 {
         display: block;
         margin-top: 5px;
     }
-    #kuendigung-form input.error,
-    #kuendigung-form select.error,
-    #kuendigung-form textarea.error {
+    #kuendigung-form-wrapper input.error,
+    #kuendigung-form-wrapper select.error,
+    #kuendigung-form-wrapper textarea.error {
         border-color: #dc3232 !important;
     }
     #kuendigung-error-summary {
@@ -235,11 +230,11 @@ class RT_Kuendigung_Handler_V2 {
         
         <div id="kuendigung-form-wrapper" style="display: none;">
             <div class="inside">
-                <form id="kuendigung-form" novalidate>
-                    <input type="hidden" id="kuendigung-employee-id" name="employee_id" value="<?php echo esc_attr($post->ID); ?>" />
-                    <?php wp_nonce_field('create_kuendigung_v2', 'kuendigung_nonce'); ?>
-
-                    <table class="form-table">
+                <p class="description" style="margin-bottom: 15px; color: #666; font-size: 12px;">
+                    <?php _e('Füllen Sie die Felder aus und klicken Sie auf "Aktualisieren" (oben rechts), um die Kündigung zu erstellen und den Status zu ändern.', 'rt-employee-manager-v2'); ?>
+                </p>
+                <?php wp_nonce_field('save_kuendigung_v2', 'kuendigung_nonce'); ?>
+                <table class="form-table">
                         <tr>
                             <th scope="row"><label for="kuendigungsart"><?php _e('Kündigungsart', 'rt-employee-manager-v2'); ?> *</label></th>
                             <td>
@@ -303,16 +298,16 @@ class RT_Kuendigung_Handler_V2 {
                             <td><textarea name="notes" id="notes" rows="2" class="large-text"></textarea></td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="kuendigung-email-address"><?php _e('E-Mail für PDF', 'rt-employee-manager-v2'); ?> *</label></th>
+                            <th scope="row"><label for="kuendigung_email_address"><?php _e('E-Mail für PDF', 'rt-employee-manager-v2'); ?></label></th>
                             <td>
                                 <?php $employee_data = $this->get_employee_data($post->ID); $employee_email = $employee_data['email'] ?? ''; ?>
-                                <input type="email" id="kuendigung-email-address" placeholder="<?php _e('E-Mail-Adresse eingeben', 'rt-employee-manager-v2'); ?>" value="<?php echo esc_attr($employee_email); ?>" class="regular-text" required />
-                                <p class="description"><?php _e('Das PDF wird an diese E-Mail-Adresse gesendet.', 'rt-employee-manager-v2'); ?></p>
+                                <input type="email" name="kuendigung_email_address" id="kuendigung_email_address" placeholder="<?php _e('E-Mail-Adresse eingeben', 'rt-employee-manager-v2'); ?>" value="<?php echo esc_attr($employee_email); ?>" class="regular-text" />
+                                <p class="description"><?php _e('Optional: E-Mail-Adresse für automatischen PDF-Versand nach dem Speichern.', 'rt-employee-manager-v2'); ?></p>
                                 <?php $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', ''); ?>
                                 <?php if (!empty($buchhaltung_email)): ?>
                                 <p style="margin-top: 8px;">
                                     <label>
-                                        <input type="checkbox" id="send-to-bookkeeping-on-create" />
+                                        <input type="checkbox" name="send_to_bookkeeping_on_create" id="send_to_bookkeeping_on_create" />
                                         <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
                                         <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
                                     </label>
@@ -321,19 +316,70 @@ class RT_Kuendigung_Handler_V2 {
                             </td>
                         </tr>
                     </table>
-
-                    <p class="submit" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
-                        <button type="submit" class="button button-primary"><?php _e('Kündigung erstellen und PDF versenden', 'rt-employee-manager-v2'); ?></button>
-                        <button type="button" class="button" id="cancel-kuendigung-form"><?php _e('Abbrechen', 'rt-employee-manager-v2'); ?></button>
-                    </p>
-                </form>
+                </div>
             </div>
         </div>
-    </div>
     <?php else: ?>
-    <p style="padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404;">
+    <!-- Employee is terminated - show email options -->
+    <div style="padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404; margin-bottom: 15px;">
         <strong><?php _e('Mitarbeiter bereits ausgeschieden', 'rt-employee-manager-v2'); ?></strong>
-    </p>
+    </div>
+    
+    <?php 
+    // Get the most recent Kündigung for this employee
+    $latest_kuendigung = get_posts(array(
+        'post_type' => 'kuendigung_v2',
+        'meta_query' => array(
+            array(
+                'key' => 'employee_id',
+                'value' => $post->ID,
+                'compare' => '='
+            )
+        ),
+        'posts_per_page' => 1,
+        'orderby' => 'date',
+        'order' => 'DESC',
+        'post_status' => 'any'
+    ));
+    
+    if (!empty($latest_kuendigung)):
+        $kuendigung = $latest_kuendigung[0];
+        $email_sent = get_post_meta($kuendigung->ID, 'email_sent', true);
+    ?>
+    <div style="padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+        <h4 style="margin-top: 0; font-size: 13px;"><?php _e('PDF per E-Mail versenden', 'rt-employee-manager-v2'); ?></h4>
+        <?php if ($email_sent === '1'): ?>
+        <p style="color: green; font-size: 12px; margin-bottom: 10px;">
+            ✓ <?php _e('PDF bereits versendet', 'rt-employee-manager-v2'); ?>
+        </p>
+        <?php endif; ?>
+        
+        <p style="margin-bottom: 10px;">
+            <input type="email" id="kuendigung-email-address-send" class="regular-text" 
+                placeholder="<?php _e('E-Mail-Adresse eingeben', 'rt-employee-manager-v2'); ?>"
+                value="<?php echo esc_attr($employee_email); ?>" style="width: 100%;" />
+        </p>
+        
+        <?php $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', ''); ?>
+        <?php if (!empty($buchhaltung_email)): ?>
+        <p style="margin-bottom: 10px;">
+            <label>
+                <input type="checkbox" id="send-to-bookkeeping-send" />
+                <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
+            </label>
+        </p>
+        <?php endif; ?>
+        
+        <p>
+            <button type="button" class="button button-primary send-kuendigung-email" 
+                data-kuendigung-id="<?php echo esc_attr($kuendigung->ID); ?>"
+                data-employee-id="<?php echo esc_attr($post->ID); ?>" style="width: 100%;">
+                <?php _e('PDF versenden', 'rt-employee-manager-v2'); ?>
+            </button>
+        </p>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 
     <?php if (!empty($existing_kuendigungen)): ?>
@@ -422,7 +468,119 @@ class RT_Kuendigung_Handler_V2 {
     }
     
     /**
-     * Enqueue scripts for Kündigung modal
+     * Save Kündigung when employee post is saved
+     */
+    public function save_kuendigung_on_post_save($post_id) {
+        // Check autosave, revisions, and permissions
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            return;
+        }
+        
+        if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) {
+            return;
+        }
+        
+        if (!current_user_can('edit_post', $post_id)) {
+            return;
+        }
+        
+        // Check if Kündigung form was submitted
+        if (!isset($_POST['kuendigung_nonce']) || !wp_verify_nonce($_POST['kuendigung_nonce'], 'save_kuendigung_v2')) {
+            return;
+        }
+        
+        // Check if Kündigung fields are present (form was filled)
+        if (empty($_POST['kuendigungsart']) || empty($_POST['kuendigungsdatum']) || empty($_POST['beendigungsdatum'])) {
+            return;
+        }
+        
+        // Check if employee is already terminated
+        $current_status = get_post_meta($post_id, 'status', true);
+        if ($current_status === 'terminated') {
+            return; // Don't create duplicate Kündigung
+        }
+        
+        // Validate required fields
+        $required = array('kuendigungsart', 'kuendigungsdatum', 'beendigungsdatum', 'kuendigungsgrund', 'employer_name', 'employer_email');
+        foreach ($required as $field) {
+            if (empty($_POST[$field])) {
+                return; // Missing required field
+            }
+        }
+        
+        // Date validation
+        $kuendigungsdatum = strtotime($_POST['kuendigungsdatum']);
+        $beendigungsdatum = strtotime($_POST['beendigungsdatum']);
+        if ($beendigungsdatum < $kuendigungsdatum) {
+            return; // Invalid date
+        }
+        
+        // Get employee data for title
+        $employee = get_post($post_id);
+        $employee_data = $this->get_employee_data($post_id);
+        $employee_name = trim(($employee_data['vorname'] ?? '') . ' ' . ($employee_data['nachname'] ?? ''));
+        if (empty($employee_name)) {
+            $employee_name = $employee->post_title;
+        }
+        
+        // Create Kündigung post
+        $user = wp_get_current_user();
+        $kuendigung_id = wp_insert_post(array(
+            'post_type' => 'kuendigung_v2',
+            'post_title' => sprintf(__('Kündigung: %s - %s', 'rt-employee-manager-v2'), $employee_name, date_i18n('d.m.Y', $kuendigungsdatum)),
+            'post_status' => 'publish',
+            'post_author' => $user->ID
+        ));
+        
+        if (is_wp_error($kuendigung_id)) {
+            return;
+        }
+        
+        // Save all meta fields
+        $meta_fields = array(
+            'employee_id' => $post_id,
+            'kuendigungsart' => sanitize_text_field($_POST['kuendigungsart']),
+            'kuendigungsdatum' => sanitize_text_field($_POST['kuendigungsdatum']),
+            'beendigungsdatum' => sanitize_text_field($_POST['beendigungsdatum']),
+            'kuendigungsgrund' => sanitize_textarea_field($_POST['kuendigungsgrund']),
+            'employer_name' => sanitize_text_field($_POST['employer_name']),
+            'employer_email' => sanitize_email($_POST['employer_email']),
+            'kuendigungsfrist' => sanitize_text_field($_POST['kuendigungsfrist'] ?? ''),
+            'resturlaub' => isset($_POST['resturlaub']) ? floatval($_POST['resturlaub']) : 0,
+            'ueberstunden' => isset($_POST['ueberstunden']) ? floatval($_POST['ueberstunden']) : 0,
+            'zeugnis_gewuenscht' => !empty($_POST['zeugnis_gewuenscht']) ? '1' : '0',
+            'uebergabe_erledigt' => !empty($_POST['uebergabe_erledigt']) ? '1' : '0',
+            'notes' => sanitize_textarea_field($_POST['notes'] ?? '')
+        );
+        
+        foreach ($meta_fields as $key => $value) {
+            update_post_meta($kuendigung_id, $key, $value);
+        }
+        
+        // Update employee status to terminated
+        update_post_meta($post_id, 'status', 'terminated');
+        
+        // Send email if address provided
+        if (!empty($_POST['kuendigung_email_address'])) {
+            $email_address = sanitize_email($_POST['kuendigung_email_address']);
+            $send_to_bookkeeping = !empty($_POST['send_to_bookkeeping_on_create']);
+            
+            $pdf_generator = new RT_Kuendigung_PDF_Generator_V2();
+            $result = $pdf_generator->send_kuendigung_email_manual($kuendigung_id, $post_id, $email_address, true, $send_to_bookkeeping);
+            
+            if ($result['success']) {
+                // Email sent successfully - meta already updated by send_kuendigung_email_manual
+            }
+        }
+        
+        // Set redirect parameter for success message
+        add_filter('redirect_post_location', function($location) {
+            return add_query_arg('kuendigung_created', '1', $location);
+        });
+    }
+    
+    /**
+     * Enqueue scripts for Kündigung toggle
      */
     public function enqueue_kuendigung_scripts($hook) {
         if ($hook !== 'post.php' && $hook !== 'post-new.php') {
@@ -446,7 +604,7 @@ class RT_Kuendigung_Handler_V2 {
         ));
         
         // Add inline script attached to jquery
-        wp_add_inline_script('jquery', '
+        $js_code = <<<'JS'
             jQuery(document).ready(function($) {
                 // Ensure rtKuendigungV2 is available
                 if (typeof rtKuendigungV2 === "undefined") {
@@ -537,25 +695,21 @@ class RT_Kuendigung_Handler_V2 {
                         errors.push("Beendigungsdatum darf nicht vor Kündigungsdatum liegen.");
                     }
 
-                    // PDF email validation
-                    var emailAddress = $("#kuendigung-email-address").val().trim();
-                    if (!emailAddress) {
-                        showFieldError("kuendigung-email-address", "Pflichtfeld");
-                        isValid = false;
-                        errors.push("Bitte geben Sie eine E-Mail-Adresse für den PDF-Versand ein.");
-                    } else if (!isValidEmail(emailAddress)) {
-                        showFieldError("kuendigung-email-address", "Ungültige E-Mail-Adresse");
+                    // PDF email validation (optional)
+                    var emailAddress = $("#kuendigung_email_address").val().trim();
+                    if (emailAddress && !isValidEmail(emailAddress)) {
+                        showFieldError("kuendigung_email_address", "Ungültige E-Mail-Adresse");
                         isValid = false;
                         errors.push("Bitte geben Sie eine gültige E-Mail-Adresse für den PDF-Versand ein.");
                     } else {
-                        clearFieldError("kuendigung-email-address");
+                        clearFieldError("kuendigung_email_address");
                     }
 
                     // Show summary if errors exist
                     var $errorSummary = $("#kuendigung-error-summary");
                     if (!isValid) {
                         if ($errorSummary.length === 0) {
-                            $("#kuendigung-form").prepend("<div id=\"kuendigung-error-summary\" style=\"background: #ffeaea; border: 1px solid #dc3232; color: #dc3232; padding: 10px; margin-bottom: 20px; border-radius: 4px;\"><strong>Bitte korrigieren Sie die folgenden Fehler:</strong><ul style=\"margin: 10px 0 0 20px; padding: 0;\"></ul></div>");
+                            $("#kuendigung-form-wrapper").prepend("<div id=\"kuendigung-error-summary\" style=\"background: #ffeaea; border: 1px solid #dc3232; color: #dc3232; padding: 10px; margin-bottom: 20px; border-radius: 4px;\"><strong>Bitte korrigieren Sie die folgenden Fehler:</strong><ul style=\"margin: 10px 0 0 20px; padding: 0;\"></ul></div>");
                         }
                         var $errorList = $("#kuendigung-error-summary ul");
                         $errorList.empty();
@@ -564,7 +718,7 @@ class RT_Kuendigung_Handler_V2 {
                         });
                         $("#kuendigung-error-summary").show();
                         // Scroll to top of form
-                        $("html, body").animate({ scrollTop: $("#kuendigung-form").offset().top - 50 }, 300);
+                        $("html, body").animate({ scrollTop: $("#kuendigung-form-wrapper").offset().top - 50 }, 300);
                     } else {
                         $("#kuendigung-error-summary").hide();
                     }
@@ -572,227 +726,68 @@ class RT_Kuendigung_Handler_V2 {
                     return isValid;
                 }
 
-                var formModified = false;
-
-                    // Toggle form visibility
-                    $(document).on("click", "#toggle-kuendigung-form", function(e) {
-                        e.preventDefault();
-                        var $header = $(this);
-                        var $wrapper = $("#kuendigung-form-wrapper");
-                        var $icon = $header.find(".kuendigung-toggle-icon");
-                        
-                        if ($wrapper.is(":visible")) {
-                            $wrapper.slideUp(200);
-                            $header.removeClass("active");
-                            $icon.text("▼");
-                            formModified = false;
-                            // Clear form and errors
-                            var $form = $("#kuendigung-form");
-                            if ($form.length > 0 && $form[0]) {
-                                $form[0].reset();
-                            }
-                            $(".field-error").remove();
-                            $("#kuendigung-error-summary").hide();
-                            $("input, select, textarea").css("border-color", "");
-                        } else {
-                            $wrapper.slideDown(200);
-                            $header.addClass("active");
-                            $icon.text("▲");
-                            formModified = false;
-                            // Clear any previous errors
-                            $(".field-error").remove();
-                            $("#kuendigung-error-summary").hide();
-                            $("input, select, textarea").css("border-color", "");
-                        }
-                    });
-                    
-                    // Cancel button - closes the form
-                    $(document).on("click", "#cancel-kuendigung-form", function(e) {
-                        e.preventDefault();
-                        if (formModified) {
-                            if (!confirm("Das Formular wurde geändert. Möchten Sie wirklich schließen? Nicht gespeicherte Änderungen gehen verloren.")) {
+                // Validate before WordPress save button submits
+                $(document).on("click", "#publish, #save-post", function(e) {
+                    // Only validate if form is visible and has data
+                    if ($("#kuendigung-form-wrapper").is(":visible")) {
+                        var hasData = false;
+                        $("#kuendigung-form-wrapper input, #kuendigung-form-wrapper select, #kuendigung-form-wrapper textarea").each(function() {
+                            if ($(this).val() && $(this).attr("id") !== "kuendigung_email_address") {
+                                hasData = true;
                                 return false;
-                            }
-                        }
-                        $("#toggle-kuendigung-form").trigger("click");
-                    });
-
-                    // Track form modifications
-                    $(document).on("input change", "#kuendigung-form input, #kuendigung-form select, #kuendigung-form textarea", function() {
-                        formModified = true;
-                        var fieldId = $(this).attr("id");
-                        if (fieldId) {
-                            clearFieldError(fieldId);
-                        }
-                    });
-
-                    // Real-time validation on blur
-                    $(document).on("blur", "#kuendigungsart, #kuendigungsdatum, #beendigungsdatum, #kuendigungsgrund, #employer_name, #employer_email, #kuendigung-email-address", function() {
-                        var fieldId = $(this).attr("id");
-                        var value = $(this).val();
-                        if (fieldId === "kuendigungsgrund" || fieldId === "employer_name" || fieldId === "employer_email") {
-                            value = value.trim();
-                        }
-
-                        if (!value && fieldId !== "kuendigung-email-address") {
-                            var requiredFields = {
-                                kuendigungsart: "Kündigungsart",
-                                kuendigungsdatum: "Kündigungsdatum",
-                                beendigungsdatum: "Beendigungsdatum",
-                                kuendigungsgrund: "Grund der Kündigung",
-                                employer_name: "Aussteller",
-                                employer_email: "Aussteller E-Mail"
-                            };
-                            if (requiredFields[fieldId]) {
-                                showFieldError(fieldId, "Pflichtfeld");
-                            }
-                        } else if (fieldId === "employer_email" && value && !isValidEmail(value)) {
-                            showFieldError(fieldId, "Ungültige E-Mail-Adresse");
-                        } else if (fieldId === "kuendigung-email-address") {
-                            if (!value) {
-                                showFieldError(fieldId, "Pflichtfeld");
-                            } else if (!isValidEmail(value)) {
-                                showFieldError(fieldId, "Ungültige E-Mail-Adresse");
-                            } else {
-                                clearFieldError(fieldId);
-                            }
-                        } else if (fieldId === "beendigungsdatum") {
-                            var kuendigungsdatum = $("#kuendigungsdatum").val();
-                            if (kuendigungsdatum && value && value < kuendigungsdatum) {
-                                showFieldError(fieldId, "Beendigungsdatum muss nach oder gleich Kündigungsdatum sein");
-                            } else {
-                                clearFieldError(fieldId);
-                            }
-                        } else {
-                            clearFieldError(fieldId);
-                        }
-                    });
-
-
-                    // Form submit handler - prevent default submission
-                    $(document).on("submit", "#kuendigung-form", function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.stopImmediatePropagation();
-                        
-                        console.log("Form submit triggered");
-                        
-                        var $form = $(this);
-                        
-                        // Validate before submit - MUST pass validation
-                        if (!validateForm()) {
-                            console.log("Validation failed - preventing submission");
-                            // Scroll to first error
-                            var $firstError = $form.find(".field-error").first();
-                            if ($firstError.length) {
-                                $("html, body").animate({ 
-                                    scrollTop: $firstError.closest("tr, .form-field").offset().top - 100 
-                                }, 300);
-                            }
-                            return false;
-                        }
-
-                        var submitBtn = $form.find("button[type=submit]");
-                        var originalText = submitBtn.text();
-                        submitBtn.prop("disabled", true).text("Erstelle Kündigung...");
-
-                        var emailAddress = $("#kuendigung-email-address").val().trim();
-                        var formData = $form.serialize();
-                        var data = formData + "&action=create_kuendigung_v2";
-                        data += "&email_address=" + encodeURIComponent(emailAddress);
-                        data += "&send_to_bookkeeping=" + ($("#send-to-bookkeeping-on-create").is(":checked") ? "1" : "");
-
-                        console.log("Sending AJAX request:", data);
-
-                        $.ajax({
-                            url: rtKuendigungV2.ajaxurl,
-                            type: "POST",
-                            dataType: "json",
-                            data: data,
-                            success: function(response) {
-                                console.log("AJAX success:", response);
-                                if (response && response.success) {
-                                    formModified = false;
-                                    
-                                    // Add success parameter to URL for message display
-                                    var url = new URL(window.location.href);
-                                    url.searchParams.set("kuendigung_created", "1");
-                                    url.searchParams.set("kuendigung_id", response.data.kuendigung_id || "");
-                                    
-                                    // Show success message and reload
-                                    window.location.href = url.toString();
-                                } else {
-                                    alert("Fehler: " + (response.data || "Unbekannter Fehler"));
-                                    submitBtn.prop("disabled", false).text(originalText);
-                                }
-                            },
-                            error: function(xhr, status, error) {
-                                console.error("AJAX error:", status, error, xhr);
-                                var msg = "Fehler beim Erstellen der Kündigung";
-                                try { 
-                                    var response = JSON.parse(xhr.responseText);
-                                    msg = response.data || msg;
-                                } catch(e) {
-                                    console.error("Parse error:", e);
-                                }
-                                alert(msg);
-                                submitBtn.prop("disabled", false).text(originalText);
                             }
                         });
-                        return false;
-                    });
-                    
-                    // Prevent button from submitting if validation fails
-                    $(document).on("click", "#kuendigung-form button[type=submit]", function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.stopImmediatePropagation();
                         
-                        // Trigger validation first - MUST pass
-                        if (!validateForm()) {
-                            console.log("Validation failed on button click - submission blocked");
-                            return false;
-                        }
-                        
-                        // If validation passes, trigger submit
-                        $("#kuendigung-form").trigger("submit");
-                        return false;
-                    });
-                    
-                    // Also prevent Enter key submission if validation fails
-                    $(document).on("keydown", "#kuendigung-form", function(e) {
-                        if (e.key === "Enter" || e.keyCode === 13) {
-                            var $target = $(e.target);
-                            // Allow Enter in textareas
-                            if ($target.is("textarea")) {
-                                return true;
-                            }
-                            // For other fields, prevent default and validate
+                        if (hasData && !validateForm()) {
                             e.preventDefault();
-                            if (!validateForm()) {
-                                console.log("Validation failed on Enter key - submission blocked");
-                                return false;
-                            }
-                            // If valid, trigger submit
-                            $("#kuendigung-form").trigger("submit");
+                            e.stopImmediatePropagation();
+                            alert("Bitte korrigieren Sie die Fehler im Kündigungsformular vor dem Speichern.");
                             return false;
                         }
-                    });
+                    }
+                });
 
+                // Toggle form visibility
+                $(document).on("click", "#toggle-kuendigung-form", function(e) {
+                    e.preventDefault();
+                    var $header = $(this);
+                    var $wrapper = $("#kuendigung-form-wrapper");
+                    var $icon = $header.find(".kuendigung-toggle-icon");
+                    
+                    if ($wrapper.is(":visible")) {
+                        $wrapper.slideUp(200);
+                        $header.removeClass("active");
+                        $icon.text("▼");
+                        // Clear form and errors
+                        $("#kuendigung-form-wrapper input, #kuendigung-form-wrapper select, #kuendigung-form-wrapper textarea").val("");
+                        $(".field-error").remove();
+                        $("#kuendigung-error-summary").hide();
+                        $("input, select, textarea").css("border-color", "");
+                    } else {
+                        $wrapper.slideDown(200);
+                        $header.addClass("active");
+                        $icon.text("▲");
+                        // Clear any previous errors
+                        $(".field-error").remove();
+                        $("#kuendigung-error-summary").hide();
+                        $("input, select, textarea").css("border-color", "");
+                    }
+                });
+
+                    // Email sending for terminated employees
                     $(document).on("click", ".send-kuendigung-email", function(e) {
                         e.preventDefault();
                         var button = $(this);
-                        var item = button.closest(".kuendigung-item");
-                        var email = item.find(".kuendigung-email-input").val().trim();
-                        var toEmployee = item.find(".send-to-employee").is(":checked");
-                        var toBookkeeping = item.find(".send-to-bookkeeping").is(":checked");
-
-                        if (!toEmployee && !toBookkeeping) {
-                            alert("Bitte wählen Sie mindestens einen Empfänger aus.");
+                        var email = $("#kuendigung-email-address-send").val().trim();
+                        var toBookkeeping = $("#send-to-bookkeeping-send").is(":checked");
+                        
+                        if (!email && !toBookkeeping) {
+                            alert("Bitte geben Sie eine E-Mail-Adresse ein oder wählen Sie 'Auch an Buchhaltung senden'.");
                             return;
                         }
-                        if (toEmployee && !email) {
-                            alert("Bitte geben Sie die E-Mail-Adresse ein.");
+                        
+                        if (!email) {
+                            alert("Bitte geben Sie eine E-Mail-Adresse ein.");
                             return;
                         }
 
@@ -807,7 +802,7 @@ class RT_Kuendigung_Handler_V2 {
                                 kuendigung_id: button.data("kuendigung-id"),
                                 employee_id: button.data("employee-id"),
                                 employee_email: email,
-                                send_to_employee: toEmployee ? "1" : "",
+                                send_to_employee: email ? "1" : "",
                                 send_to_bookkeeping: toBookkeeping ? "1" : "",
                                 nonce: rtKuendigungV2.nonce
                             },
@@ -824,107 +819,10 @@ class RT_Kuendigung_Handler_V2 {
                         });
                     });
                 });
-        ');
+JS;
+        wp_add_inline_script('jquery', $js_code);
     }
     
-    /**
-     * AJAX handler to create Kündigung
-     */
-    public function ajax_create_kuendigung() {
-        if (!isset($_POST['kuendigung_nonce']) || !wp_verify_nonce($_POST['kuendigung_nonce'], 'create_kuendigung_v2')) {
-            wp_send_json_error('Security error');
-        }
-        
-        $employee_id = intval($_POST['employee_id'] ?? 0);
-        $employee = get_post($employee_id);
-        if (!$employee || $employee->post_type !== 'angestellte_v2') {
-            wp_send_json_error('Invalid employee');
-        }
-        
-        $user = wp_get_current_user();
-        $is_admin = current_user_can('manage_options');
-        if (!$is_admin && !in_array('kunden_v2', $user->roles)) {
-            wp_send_json_error('No permission');
-        }
-        if (!$is_admin && get_post_meta($employee_id, 'employer_id', true) != $user->ID) {
-                wp_send_json_error('No permission for this employee');
-        }
-        
-        $required = array('kuendigungsart', 'kuendigungsdatum', 'beendigungsdatum', 'kuendigungsgrund', 'employer_name', 'employer_email');
-        foreach ($required as $field) {
-            if (empty($_POST[$field])) {
-            wp_send_json_error('Bitte füllen Sie alle Pflichtfelder aus');
-            }
-        }
-        
-        // Date validation: beendigungsdatum >= kuendigungsdatum
-        $kuendigungsdatum = strtotime($_POST['kuendigungsdatum']);
-        $beendigungsdatum = strtotime($_POST['beendigungsdatum']);
-        if ($beendigungsdatum < $kuendigungsdatum) {
-            wp_send_json_error(__('Beendigungsdatum muss nach oder gleich Kündigungsdatum sein.', 'rt-employee-manager-v2'));
-        }
-        
-        $email_address = sanitize_email($_POST['email_address'] ?? '');
-        if (empty($email_address)) {
-            wp_send_json_error(__('Bitte geben Sie eine E-Mail-Adresse ein.', 'rt-employee-manager-v2'));
-        }
-        
-        $employee_data = $this->get_employee_data($employee_id);
-        $employee_name = trim(($employee_data['vorname'] ?? '') . ' ' . ($employee_data['nachname'] ?? ''));
-        if (empty($employee_name)) {
-            $employee_name = $employee->post_title;
-        }
-        
-        $kuendigung_id = wp_insert_post(array(
-            'post_type' => 'kuendigung_v2',
-            'post_title' => sprintf(__('Kündigung: %s - %s', 'rt-employee-manager-v2'), $employee_name, date_i18n('d.m.Y', strtotime($_POST['kuendigungsdatum']))),
-            'post_status' => 'publish',
-            'post_author' => $user->ID
-        ));
-        
-        if (is_wp_error($kuendigung_id)) {
-            wp_send_json_error('Failed to create Kündigung: ' . $kuendigung_id->get_error_message());
-        }
-        
-        $meta_fields = array(
-            'employee_id' => $employee_id,
-            'kuendigungsart' => sanitize_text_field($_POST['kuendigungsart']),
-            'kuendigungsdatum' => sanitize_text_field($_POST['kuendigungsdatum']),
-            'beendigungsdatum' => sanitize_text_field($_POST['beendigungsdatum']),
-            'kuendigungsgrund' => sanitize_textarea_field($_POST['kuendigungsgrund']),
-            'employer_name' => sanitize_text_field($_POST['employer_name']),
-            'employer_email' => sanitize_email($_POST['employer_email']),
-            'kuendigungsfrist' => sanitize_text_field($_POST['kuendigungsfrist'] ?? ''),
-            'resturlaub' => isset($_POST['resturlaub']) ? floatval($_POST['resturlaub']) : 0,
-            'ueberstunden' => isset($_POST['ueberstunden']) ? floatval($_POST['ueberstunden']) : 0,
-            'zeugnis_gewuenscht' => !empty($_POST['zeugnis_gewuenscht']) ? '1' : '0',
-            'uebergabe_erledigt' => !empty($_POST['uebergabe_erledigt']) ? '1' : '0',
-            'notes' => sanitize_textarea_field($_POST['notes'] ?? '')
-        );
-        
-        foreach ($meta_fields as $key => $value) {
-            update_post_meta($kuendigung_id, $key, $value);
-        }
-        
-        update_post_meta($employee_id, 'status', 'terminated');
-        
-        $pdf_generator = new RT_Kuendigung_PDF_Generator_V2();
-        $result = $pdf_generator->send_kuendigung_email_manual($kuendigung_id, $employee_id, $email_address, true, !empty($_POST['send_to_bookkeeping']));
-        
-        $message = __('Kündigung erstellt.', 'rt-employee-manager-v2');
-        if ($result['success']) {
-            $message .= ' ' . __('PDF erfolgreich per E-Mail versendet. Beschäftigungsstatus wurde auf "Ausgeschieden" geändert.', 'rt-employee-manager-v2');
-        } else {
-            $message .= ' ' . __('Kündigung erstellt und Beschäftigungsstatus auf "Ausgeschieden" geändert, aber E-Mail-Versand fehlgeschlagen: ', 'rt-employee-manager-v2') . ($result['error'] ?? __('Unbekannter Fehler', 'rt-employee-manager-v2'));
-        }
-        
-        wp_send_json_success(array(
-            'message' => $message,
-            'kuendigung_id' => $kuendigung_id,
-            'status_updated' => 'yes',
-            'email_sent' => ($result['success'] ? 'yes' : 'no')
-        ));
-    }
     
     /**
      * Get employee data
