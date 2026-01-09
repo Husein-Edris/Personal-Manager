@@ -64,6 +64,8 @@ class RT_Kuendigung_Handler_V2 {
         
         // Check if Kündigung was just created
         $kuendigung_created = isset($_GET['kuendigung_created']) && $_GET['kuendigung_created'] === '1';
+        // Check if email was just sent
+        $email_sent = isset($_GET['email_sent']) && $_GET['email_sent'] === '1';
         ?>
 <div class="rt-kuendigung-actions" style="padding: 10px;">
         <?php if ($kuendigung_created): ?>
@@ -74,6 +76,14 @@ class RT_Kuendigung_Handler_V2 {
             </p>
             <p style="margin: 5px 0 0 0; color: #155724; font-size: 13px;">
                 <?php _e('Der Beschäftigungsstatus wurde auf "Ausgeschieden" geändert.', 'rt-employee-manager-v2'); ?>
+            </p>
+        </div>
+        <?php endif; ?>
+        <?php if ($email_sent): ?>
+        <div class="notice notice-success is-dismissible" style="background: #d4edda; border-left: 4px solid #28a745; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+            <p style="margin: 0; color: #155724; font-weight: bold;">
+                <span style="font-size: 18px; margin-right: 8px;">✓</span>
+                <?php _e('PDF erfolgreich per E-Mail versendet!', 'rt-employee-manager-v2'); ?>
             </p>
         </div>
         <?php endif; ?>
@@ -774,19 +784,35 @@ class RT_Kuendigung_Handler_V2 {
                     }
                 });
 
-                    // Email sending for terminated employees
+                    // Email sending for terminated employees and existing Kündigungen
                     $(document).on("click", ".send-kuendigung-email", function(e) {
                         e.preventDefault();
                         var button = $(this);
-                        var email = $("#kuendigung-email-address-send").val().trim();
-                        var toBookkeeping = $("#send-to-bookkeeping-send").is(":checked");
+                        var item = button.closest(".kuendigung-item, .rt-kuendigung-actions");
                         
-                        if (!email && !toBookkeeping) {
-                            alert("Bitte geben Sie eine E-Mail-Adresse ein oder wählen Sie 'Auch an Buchhaltung senden'.");
+                        // Check which form we're using
+                        var emailField = item.find("#kuendigung-email-address-send");
+                        var isTerminatedSection = emailField.length > 0;
+                        
+                        var email = isTerminatedSection
+                            ? emailField.val().trim()
+                            : item.find(".kuendigung-email-input").val().trim();
+                        
+                        // For terminated section: if email provided, send to employee; checkbox is for bookkeeping only
+                        // For existing Kündigungen: use checkboxes
+                        var toEmployee = isTerminatedSection 
+                            ? (email.length > 0)  // If email provided, send to employee
+                            : item.find(".send-to-employee").is(":checked");
+                        
+                        var toBookkeeping = item.find("#send-to-bookkeeping-send").is(":checked") 
+                            || item.find(".send-to-bookkeeping").is(":checked");
+                        
+                        if (!toEmployee && !toBookkeeping) {
+                            alert("Bitte wählen Sie mindestens einen Empfänger aus.");
                             return;
                         }
                         
-                        if (!email) {
+                        if (toEmployee && !email) {
                             alert("Bitte geben Sie eine E-Mail-Adresse ein.");
                             return;
                         }
@@ -802,20 +828,25 @@ class RT_Kuendigung_Handler_V2 {
                                 kuendigung_id: button.data("kuendigung-id"),
                                 employee_id: button.data("employee-id"),
                                 employee_email: email,
-                                send_to_employee: email ? "1" : "",
+                                send_to_employee: toEmployee ? "1" : "",
                                 send_to_bookkeeping: toBookkeeping ? "1" : "",
                                 nonce: rtKuendigungV2.nonce
                             },
                             success: function(response) {
                                 if (response.success) {
-                                    alert("✓ " + response.data.message);
-                                    location.reload();
+                                    // Reload with success parameter
+                                    var url = new URL(window.location.href);
+                                    url.searchParams.set("email_sent", "1");
+                                    window.location.href = url.toString();
                                 } else {
                                     alert("Fehler: " + response.data);
+                                    button.prop("disabled", false).text(originalText);
                                 }
                             },
-                            error: function() { alert("Fehler beim Versenden der E-Mail"); },
-                            complete: function() { button.prop("disabled", false).text(originalText); }
+                            error: function() { 
+                                alert("Fehler beim Versenden der E-Mail");
+                                button.prop("disabled", false).text(originalText);
+                            }
                         });
                     });
                 });
