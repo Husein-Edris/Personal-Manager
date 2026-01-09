@@ -386,28 +386,23 @@ class RT_Kuendigung_PDF_Generator_V2 {
      */
     private function generate_pdf_from_html($html) {
         if (!class_exists('\Dompdf\Dompdf')) {
-            error_log('RT Employee Manager V2: DomPDF not found for Kündigung PDF');
             return false;
         }
         
         try {
             $dompdf = new \Dompdf\Dompdf();
-            
             $options = $dompdf->getOptions();
             $options->set('isRemoteEnabled', true);
             $options->set('isHtml5ParserEnabled', true);
             $options->set('isPhpEnabled', false);
             $options->set('isFontSubsettingEnabled', true);
             $options->set('defaultFont', 'DejaVu Sans');
-            
             $dompdf->setOptions($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
-            
             return $dompdf->output();
         } catch (Exception $e) {
-            error_log('RT Employee Manager V2: Kündigung PDF generation error: ' . $e->getMessage());
             return false;
         }
     }
@@ -477,10 +472,6 @@ class RT_Kuendigung_PDF_Generator_V2 {
             return array('success' => false, 'error' => 'No recipients selected');
         }
         
-        // Log for debugging
-        error_log('RT Employee Manager V2: Sending Kündigung email to: ' . implode(', ', $recipients));
-        error_log('RT Employee Manager V2: PDF file: ' . $pdf_file);
-        
         // Email subject
         $employee_name = trim(($employee_data['vorname'] ?? '') . ' ' . ($employee_data['nachname'] ?? ''));
         if (empty($employee_name)) {
@@ -510,11 +501,8 @@ class RT_Kuendigung_PDF_Generator_V2 {
         
         // Check if PDF file exists
         if (!file_exists($pdf_file)) {
-            error_log('RT Employee Manager V2: PDF file does not exist: ' . $pdf_file);
             return array('success' => false, 'error' => 'PDF file not found');
         }
-        
-        error_log('RT Employee Manager V2: PDF file exists, size: ' . filesize($pdf_file) . ' bytes');
         
         // Send email
         $sent = wp_mail($recipients, $subject, $body, $headers, array($pdf_file));
@@ -522,21 +510,15 @@ class RT_Kuendigung_PDF_Generator_V2 {
         // Check for wp_mail errors
         global $phpmailer;
         if (!$sent && isset($phpmailer) && !empty($phpmailer->ErrorInfo)) {
-            $error_message = $phpmailer->ErrorInfo;
-            error_log('RT Employee Manager V2: wp_mail error: ' . $error_message);
-            return array('success' => false, 'error' => 'wp_mail failed: ' . $error_message);
+            return array('success' => false, 'error' => 'wp_mail failed: ' . $phpmailer->ErrorInfo);
         }
         
         if ($sent) {
-            // Store email info in meta
             update_post_meta($kuendigung_id, 'email_sent', '1');
             update_post_meta($kuendigung_id, 'email_sent_date', current_time('mysql'));
             update_post_meta($kuendigung_id, 'email_recipients', implode(', ', $recipients));
-            
-            error_log('RT Employee Manager V2: Kündigung email sent successfully to: ' . implode(', ', $recipients));
             return array('success' => true);
         } else {
-            error_log('RT Employee Manager V2: wp_mail returned false, but no error info available');
             return array('success' => false, 'error' => 'wp_mail returned false');
         }
     }
