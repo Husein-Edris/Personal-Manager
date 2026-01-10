@@ -280,23 +280,6 @@ class RT_Kuendigung_Handler_V2 {
                             <td><input type="number" name="ueberstunden" id="ueberstunden" min="0" step="0.5" style="width: 120px;" /></td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="employer_name"><?php _e('Aussteller', 'rt-employee-manager-v2'); ?> *</label></th>
-                            <td>
-                                <?php
-                                $current_user = wp_get_current_user();
-                                $employer_name = get_user_meta($current_user->ID, 'company_name', true) ?: $current_user->display_name;
-                                ?>
-                                <input type="text" name="employer_name" id="employer_name" value="<?php echo esc_attr($employer_name); ?>" class="regular-text" />
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><label for="employer_email"><?php _e('Aussteller E-Mail', 'rt-employee-manager-v2'); ?> *</label></th>
-                            <td>
-                                <?php $employer_email = $current_user->user_email; ?>
-                                <input type="email" name="employer_email" id="employer_email" value="<?php echo esc_attr($employer_email); ?>" class="regular-text" />
-                            </td>
-                        </tr>
-                        <tr>
                             <th scope="row"><?php _e('Optionen', 'rt-employee-manager-v2'); ?></th>
                             <td>
                                 <label><input type="checkbox" name="zeugnis_gewuenscht" id="zeugnis_gewuenscht" /> <?php _e('Zeugnis gewünscht', 'rt-employee-manager-v2'); ?></label><br>
@@ -404,9 +387,7 @@ class RT_Kuendigung_Handler_V2 {
                     ?>
         <div class="kuendigung-item" data-kuendigung-id="<?php echo esc_attr($kuendigung->ID); ?>">
             <h4>
-                <a href="<?php echo admin_url('post.php?post=' . $kuendigung->ID . '&action=edit'); ?>">
-                    <?php echo esc_html($kuendigung->post_title); ?>
-                </a>
+                <?php echo esc_html($kuendigung->post_title); ?>
             </h4>
 
             <div class="kuendigung-status">
@@ -510,8 +491,17 @@ class RT_Kuendigung_Handler_V2 {
             return; // Don't create duplicate Kündigung
         }
         
-        // Validate required fields
-        $required = array('kuendigungsart', 'kuendigungsdatum', 'beendigungsdatum', 'kuendigungsgrund', 'employer_name', 'employer_email');
+        // Get employee data (needed for employer info and title)
+        $employee = get_post($post_id);
+        $employee_data = $this->get_employee_data($post_id);
+        
+        // Check if employee has an employer assigned
+        if (empty($employee_data['employer_name']) || empty($employee_data['employer_email'])) {
+            return; // Employee must have an employer assigned
+        }
+        
+        // Validate required fields (employer_name and employer_email come from DB, not form)
+        $required = array('kuendigungsart', 'kuendigungsdatum', 'beendigungsdatum', 'kuendigungsgrund');
         foreach ($required as $field) {
             if (empty($_POST[$field])) {
                 return; // Missing required field
@@ -524,10 +514,6 @@ class RT_Kuendigung_Handler_V2 {
         if ($beendigungsdatum < $kuendigungsdatum) {
             return; // Invalid date
         }
-        
-        // Get employee data for title
-        $employee = get_post($post_id);
-        $employee_data = $this->get_employee_data($post_id);
         $employee_name = trim(($employee_data['vorname'] ?? '') . ' ' . ($employee_data['nachname'] ?? ''));
         if (empty($employee_name)) {
             $employee_name = $employee->post_title;
@@ -546,15 +532,15 @@ class RT_Kuendigung_Handler_V2 {
             return;
         }
         
-        // Save all meta fields
+        // Save all meta fields (employer_name and employer_email come from employee's customer data)
         $meta_fields = array(
             'employee_id' => $post_id,
             'kuendigungsart' => sanitize_text_field($_POST['kuendigungsart']),
             'kuendigungsdatum' => sanitize_text_field($_POST['kuendigungsdatum']),
             'beendigungsdatum' => sanitize_text_field($_POST['beendigungsdatum']),
             'kuendigungsgrund' => sanitize_textarea_field($_POST['kuendigungsgrund']),
-            'employer_name' => sanitize_text_field($_POST['employer_name']),
-            'employer_email' => sanitize_email($_POST['employer_email']),
+            'employer_name' => $employee_data['employer_name'], // From employee's customer DB
+            'employer_email' => $employee_data['employer_email'], // From employee's customer DB
             'kuendigungsfrist' => sanitize_text_field($_POST['kuendigungsfrist'] ?? ''),
             'resturlaub' => isset($_POST['resturlaub']) ? floatval($_POST['resturlaub']) : 0,
             'ueberstunden' => isset($_POST['ueberstunden']) ? floatval($_POST['ueberstunden']) : 0,
@@ -661,22 +647,18 @@ class RT_Kuendigung_Handler_V2 {
                     $(".field-error").remove();
                     $("input, select, textarea").css("border-color", "");
 
-                    // Required fields
+                    // Required fields (employer_name and employer_email are auto-filled from DB)
                     var requiredFields = {
                         kuendigungsart: "Kündigungsart",
                         kuendigungsdatum: "Kündigungsdatum",
                         beendigungsdatum: "Beendigungsdatum",
-                        kuendigungsgrund: "Grund der Kündigung",
-                        employer_name: "Aussteller",
-                        employer_email: "Aussteller E-Mail"
+                        kuendigungsgrund: "Grund der Kündigung"
                     };
 
                     for (var fieldId in requiredFields) {
                         var $field = $("#" + fieldId);
                         var value = $field.val();
                         if (fieldId === "kuendigungsgrund") {
-                            value = value.trim();
-                        } else if (fieldId === "employer_name" || fieldId === "employer_email") {
                             value = value.trim();
                         }
                         if (!value) {
@@ -686,14 +668,6 @@ class RT_Kuendigung_Handler_V2 {
                         } else {
                             clearFieldError(fieldId);
                         }
-                    }
-
-                    // Email validation
-                    var employerEmail = $("#employer_email").val().trim();
-                    if (employerEmail && !isValidEmail(employerEmail)) {
-                        showFieldError("employer_email", "Ungültige E-Mail-Adresse");
-                        isValid = false;
-                        errors.push("Bitte geben Sie eine gültige E-Mail-Adresse für den Aussteller ein.");
                     }
 
                     // Date validation

@@ -29,6 +29,14 @@ class RT_Kuendigung_PDF_Generator_V2 {
         $kuendigung_data = $this->get_kuendigung_data($kuendigung_id);
         $employee_data = $this->get_employee_data($employee_id);
         
+        // Override employer_name with customer company name from employee data (from DB)
+        if (!empty($employee_data['employer_name'])) {
+            $kuendigung_data['employer_name'] = $employee_data['employer_name'];
+        }
+        if (!empty($employee_data['employer_email'])) {
+            $kuendigung_data['employer_email'] = $employee_data['employer_email'];
+        }
+        
         // Create HTML
         $html = $this->create_kuendigung_html($kuendigung, $employee, $kuendigung_data, $employee_data);
         
@@ -71,6 +79,16 @@ class RT_Kuendigung_PDF_Generator_V2 {
         $data = array();
         foreach ($fields as $field) {
             $data[$field] = get_post_meta($employee_id, $field, true);
+        }
+        
+        // Get customer company name from employer_id
+        $employer_id = get_post_meta($employee_id, 'employer_id', true);
+        if ($employer_id) {
+            $employer = get_user_by('id', $employer_id);
+            if ($employer) {
+                $data['employer_name'] = get_user_meta($employer_id, 'company_name', true) ?: $employer->display_name;
+                $data['employer_email'] = $employer->user_email;
+            }
         }
         
         return $data;
