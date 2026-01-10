@@ -449,7 +449,7 @@ class RT_Employee_Meta_Boxes_V2 {
         <div class="email-options" style="margin-bottom: 15px;">
             <p><label style="display: block; margin-bottom: 5px;">
                     <input type="checkbox" id="send-to-kunde" />
-                    <?php _e('An Kunde senden (oben eingegebene E-Mail)', 'rt-employee-manager-v2'); ?>
+                    <?php _e('An oben eingegebene E-Mail senden', 'rt-employee-manager-v2'); ?>
                 </label></p>
 
             <?php 
@@ -458,7 +458,7 @@ class RT_Employee_Meta_Boxes_V2 {
                     ?>
             <p><label style="display: block;">
                     <input type="checkbox" id="send-to-bookkeeping" />
-                    <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                    <?php _e('An Buchhaltung senden', 'rt-employee-manager-v2'); ?>
                     <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
                 </label></p>
             <?php else: ?>

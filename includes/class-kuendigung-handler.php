@@ -301,7 +301,7 @@ class RT_Kuendigung_Handler_V2 {
                                 <p style="margin-top: 8px;">
                                     <label>
                                         <input type="checkbox" name="send_to_bookkeeping_on_create" id="send_to_bookkeeping_on_create" />
-                                        <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                                        <?php _e('An Buchhaltung senden', 'rt-employee-manager-v2'); ?>
                                         <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
                                     </label>
                                 </p>
@@ -313,66 +313,10 @@ class RT_Kuendigung_Handler_V2 {
             </div>
         </div>
     <?php else: ?>
-    <!-- Employee is terminated - show email options -->
+    <!-- Employee is terminated -->
     <div style="padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404; margin-bottom: 15px;">
         <strong><?php _e('Mitarbeiter bereits ausgeschieden', 'rt-employee-manager-v2'); ?></strong>
     </div>
-    
-    <?php 
-    // Get the most recent Kündigung for this employee
-    $latest_kuendigung = get_posts(array(
-        'post_type' => 'kuendigung_v2',
-        'meta_query' => array(
-            array(
-                'key' => 'employee_id',
-                'value' => $post->ID,
-                'compare' => '='
-            )
-        ),
-        'posts_per_page' => 1,
-        'orderby' => 'date',
-        'order' => 'DESC',
-        'post_status' => 'any'
-    ));
-    
-    if (!empty($latest_kuendigung)):
-        $kuendigung = $latest_kuendigung[0];
-        $email_sent = get_post_meta($kuendigung->ID, 'email_sent', true);
-    ?>
-    <div style="padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
-        <h4 style="margin-top: 0; font-size: 13px;"><?php _e('PDF per E-Mail versenden', 'rt-employee-manager-v2'); ?></h4>
-        <?php if ($email_sent === '1'): ?>
-        <p style="color: green; font-size: 12px; margin-bottom: 10px;">
-            ✓ <?php _e('PDF bereits versendet', 'rt-employee-manager-v2'); ?>
-        </p>
-        <?php endif; ?>
-        
-        <p style="margin-bottom: 10px;">
-            <input type="email" id="kuendigung-email-address-send" class="regular-text" 
-                placeholder="<?php _e('E-Mail-Adresse eingeben', 'rt-employee-manager-v2'); ?>"
-                value="<?php echo esc_attr($employee_email); ?>" style="width: 100%;" />
-        </p>
-        
-        <?php $buchhaltung_email = get_option('rt_employee_v2_buchhaltung_email', ''); ?>
-        <?php if (!empty($buchhaltung_email)): ?>
-        <p style="margin-bottom: 10px;">
-            <label>
-                <input type="checkbox" id="send-to-bookkeeping-send" />
-                <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
-                <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
-            </label>
-        </p>
-        <?php endif; ?>
-        
-        <p>
-            <button type="button" class="button button-primary send-kuendigung-email" 
-                data-kuendigung-id="<?php echo esc_attr($kuendigung->ID); ?>"
-                data-employee-id="<?php echo esc_attr($post->ID); ?>" style="width: 100%;">
-                <?php _e('PDF versenden', 'rt-employee-manager-v2'); ?>
-            </button>
-        </p>
-    </div>
-    <?php endif; ?>
     <?php endif; ?>
 
     <?php if (!empty($existing_kuendigungen)): ?>
@@ -424,10 +368,7 @@ class RT_Kuendigung_Handler_V2 {
                 <div class="email-options" style="margin-bottom: 15px;">
                     <p><label style="display: block; margin-bottom: 5px;">
                             <input type="checkbox" class="send-to-employee" checked />
-                            <?php _e('An Mitarbeiter senden', 'rt-employee-manager-v2'); ?>
-                            <?php if ($employee_email): ?>
-                            <strong>(<?php echo esc_html($employee_email); ?>)</strong>
-                            <?php endif; ?>
+                            <?php _e('An oben eingegebene E-Mail senden', 'rt-employee-manager-v2'); ?>
                         </label></p>
 
                     <?php 
@@ -436,7 +377,7 @@ class RT_Kuendigung_Handler_V2 {
                                     ?>
                     <p><label style="display: block;">
                             <input type="checkbox" class="send-to-bookkeeping" />
-                            <?php _e('Auch an Buchhaltung senden', 'rt-employee-manager-v2'); ?>
+                            <?php _e('An Buchhaltung senden', 'rt-employee-manager-v2'); ?>
                             <strong>(<?php echo esc_html($buchhaltung_email); ?>)</strong>
                         </label></p>
                     <?php endif; ?>
