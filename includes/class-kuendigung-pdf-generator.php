@@ -209,8 +209,6 @@ class RT_Kuendigung_PDF_Generator_V2 {
         }
         .signature-box {
             width: 45%;
-            border-top: 1px solid #000;
-            padding-top: 10px;
             margin-top: 60px;
         }
         .signature-label {
@@ -332,12 +330,12 @@ class RT_Kuendigung_PDF_Generator_V2 {
     
     <div class="signature-section">
         <div class="signature-box">
+            <div style="border-top: 1px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
             <div class="signature-label">Ort, Datum</div>
-            <div style="margin-top: 40px;">' . esc_html($kuendigungsdatum_formatted) . '</div>
         </div>
         <div class="signature-box">
+            <div style="border-top: 1px solid #000; margin-bottom: 5px; padding-top: 5px;"></div>
             <div class="signature-label">Unterschrift Arbeitgeber</div>
-            <div style="margin-top: 40px;">_________________________</div>
         </div>
     </div>
     
